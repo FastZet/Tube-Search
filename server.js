@@ -1,9 +1,9 @@
 const express = require('express');
 const { addonBuilder } = require('stremio-addon-sdk');
 const path = require('path');
-const manifest = require('./manifest.json');
+const manifest = require('./manifest.json'); // This will now be the updated manifest
 
-const { getTubeSearchHandlers } = require('./youtubeAddon');
+const { getTubeSearchHandlers } = require('./youtubeAddon'); // This will be the updated youtubeAddon
 
 const builder = new addonBuilder(manifest);
 getTubeSearchHandlers(builder);
@@ -20,40 +20,24 @@ app.get('/manifest.json', (req, res) => {
   res.json(manifest);
 });
 
-// Handle Catalog requests
-app.get('/catalog/:type/:id/:extra?', async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', '*');
-  console.log(`[Server Log] Received catalog request for Type: ${req.params.type}, ID: ${req.params.id}, Extra: ${req.params.extra}`); // Debugging log
-  try {
-    const args = {
-      type: req.params.type,
-      id: req.params.id,
-      extra: req.params.extra ? JSON.parse(req.params.extra) : {},
-    };
-    console.log(`[Server Log] Parsed catalog arguments: ${JSON.stringify(args)}`); // Debugging log
-    const result = await addonInterface.catalog.get(args);
-    console.log(`[Server Log] Catalog handler returned result: ${JSON.stringify(result.metas ? result.metas.length + ' metas' : result)}`); // Debugging log
-    res.json(result);
-  } catch (error) {
-    console.error('Catalog handler error:', error);
-    res.status(500).json({ err: 'Internal server error processing catalog request.' });
-  }
-});
+// Removed /catalog handler as it's a stream provider now
 
 // Handle Stream requests
 app.get('/stream/:type/:id.json', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
+  console.log(`[Server Log] Received stream request for Type: ${req.params.type}, ID: ${req.params.id}`); // Debugging log for stream requests
   try {
     const args = {
       type: req.params.type,
       id: req.params.id,
     };
+    console.log(`[Server Log] Parsed stream arguments: ${JSON.stringify(args)}`); // Debugging log
     const result = await addonInterface.stream.get(args);
+    console.log(`[Server Log] Stream handler returned result: ${result.streams ? result.streams.length + ' streams' : result}`); // Debugging log
     res.json(result);
   } catch (error) {
-    console.error('Stream handler error:', error);
+    console.error('[Server Log] Stream handler error:', error);
     res.status(500).json({ err: 'Internal server error processing stream request.' });
   }
 });
