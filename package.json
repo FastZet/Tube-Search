@@ -10,7 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.7.2",  // Ensure this line exists and is up-to-date
+    "axios": "^1.7.2",
     "express": "^4.19.2",
     "stremio-addon-sdk": "^1.7.1"
   }
