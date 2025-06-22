@@ -49,15 +49,17 @@ function getTubeSearchHandlers(builder) {
 
     // Define the catalog handler for search requests
     builder.defineCatalogHandler(async (args) => {
-        const { search, config } = args; // 'config' contains the user-provided API key
-        const { youtubeApiKey } = config || {}; // Destructure the API key
+        // Read the YouTube API key from environment variable (secret)
+        const youtubeApiKey = process.env.YOUTUBE_API_KEY; 
 
         // Check if API key is provided
         if (!youtubeApiKey) {
-            console.warn('YouTube API Key not provided by user. Cannot perform search.');
-            return Promise.resolve({ metas: [] }); // Return empty results if no API key
+            console.error('CRITICAL: YOUTUBE_API_KEY environment variable is not set. Add-on cannot perform searches.');
+            return Promise.resolve({ metas: [], err: 'Server API key not configured. Please contact the add-on deployer.' }); 
         }
 
+        const { search } = args; // 'search' is now the primary arg for query
+        
         // Apply filters from args.extra
         const durationFilter = mapDuration(args.extra && args.extra.duration);
         const resolutionFilter = mapResolution(args.extra && args.extra.resolution);
@@ -98,13 +100,14 @@ function getTubeSearchHandlers(builder) {
 
         } catch (error) {
             console.error('Error fetching from YouTube API:', error.message);
-            // Provide more specific error info if it's a known API error
             if (error.response && error.response.data && error.response.data.error) {
                 console.error('YouTube API Error Details:', error.response.data.error);
-                // Depending on the error, you might want to return a different message
-                // For instance, if quota exceeded or API key invalid.
+                // Return a user-friendly error if API key is invalid or quota is exceeded
+                if (error.response.data.error.code === 403 || error.response.data.error.code === 400) {
+                    return Promise.resolve({ metas: [], err: 'YouTube API Error: Invalid API key or quota exceeded. Please contact the add-on deployer.' });
+                }
             }
-            return Promise.resolve({ metas: [] }); // Return empty array on error
+            return Promise.resolve({ metas: [], err: 'Failed to search YouTube. Please try again later.' });
         }
     });
 
@@ -117,15 +120,10 @@ function getTubeSearchHandlers(builder) {
             return Promise.resolve({ streams: [] });
         }
 
-        // For YouTube videos, Stremio can often play them directly using specific URLs.
-        // We provide a link that Stremio knows how to handle for YouTube streams.
-        // The YOUTUBE_STREAM_SERVER URL is a common Stremio-internal mapping for YouTube streams.
         const streams = [{
             url: `${YOUTUBE_STREAM_SERVER}/${videoId}`,
             title: 'YouTube Stream',
             description: `Plays directly from YouTube.`
-            // You could add further stream properties like 'ytId' if needed for specific players
-            // but the URL itself is usually sufficient for basic playback.
         }];
 
         return Promise.resolve({ streams });
