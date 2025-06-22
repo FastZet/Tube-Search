@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tube Search Add-on Information</title>
+    <title>Tube Search Add-on Configuration</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -22,7 +22,7 @@
             padding: 30px;
             border-radius: 8px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-            max-width: 500px;
+            max-width: 600px;
             width: 100%;
             text-align: center;
         }
@@ -36,34 +36,186 @@
             line-height: 1.5;
             font-size: 0.95em;
         }
-        .info-block {
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            text-align: left;
+        }
+        input[type="text"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background-color: #333;
+            color: #f0f0f0;
+            font-size: 1em;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background-color 0.3s ease;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .instructions {
             text-align: left;
             margin-top: 25px;
             padding-top: 20px;
             border-top: 1px solid #333;
-            font-size: 0.9em;
+            font-size: 0.85em;
             color: #aaa;
         }
-        .info-block a {
+        .instructions a {
             color: #66b2ff;
             text-decoration: none;
         }
-        .info-block a:hover {
+        .instructions a:hover {
             text-decoration: underline;
+        }
+        #installLinkContainer {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #333;
+            border-radius: 8px;
+            text-align: left;
+            display: none; /* Hidden by default */
+        }
+        #installLink {
+            word-break: break-all;
+            background-color: #444;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            cursor: text;
+        }
+        .copy-button {
+            background-color: #007bff;
+            margin-left: 10px;
+            padding: 8px 15px;
+            font-size: 0.9em;
+        }
+        .copy-button:hover {
+            background-color: #0056b3;
+        }
+        .message {
+            margin-top: 15px;
+            color: #66b2ff;
+            font-size: 0.9em;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Tube Search Add-on</h1>
-        <p>This Stremio add-on allows you to search YouTube videos with advanced filters for duration and resolution directly within Stremio.</p>
+        <h1>Configure Tube Search Add-on</h1>
+        <p>This add-on requires a YouTube Data API Key to function. Please obtain your key and enter it below to generate your personalized installation link.</p>
 
-        <div class="info-block">
-            <h3>Important Information:</h3>
-            <p>This add-on requires a **YouTube Data API Key** to function. This key is provided by the add-on's deployer (administrator), not by individual users.</p>
-            <p>If you are the deployer, ensure the `YOUTUBE_API_KEY` environment variable is set in your deployment environment (e.g., Hugging Face Space secrets).</p>
-            <p>For more details or to report issues, please visit the <a href="https://github.com/your-username/your-repo-name" target="_blank">add-on's GitHub repository</a>.</p>
+        <div class="input-group">
+            <label for="youtubeApiKey">Your YouTube Data API Key:</label>
+            <input type="text" id="youtubeApiKey" placeholder="Enter your API key here..." required>
+        </div>
+
+        <button onclick="generateLink()">Generate Install Link</button>
+        <div id="installLinkContainer">
+            <label>Copy this link to install in Stremio:</label>
+            <div style="display: flex; align-items: center;">
+                <span id="installLink"></span>
+                <button class="copy-button" onclick="copyLink()">Copy</button>
+            </div>
+            <p class="message" id="copyMessage"></p>
+        </div>
+
+        <div class="instructions">
+            <h3>How to get your YouTube Data API Key:</h3>
+            <ol>
+                <li>Go to the <a href="https://console.developers.google.com/apis/dashboard" target="_blank">Google Cloud Console API Dashboard</a>.</li>
+                <li>Log in with your Google account.</li>
+                <li>Create a new project (or select an existing one).</li>
+                <li>In the "APIs & Services" section, go to "Library".</li>
+                <li>Search for "YouTube Data API v3" and enable it for your project.</li>
+                <li>Go to "Credentials" on the left sidebar.</li>
+                <li>Click "CREATE CREDENTIALS" and choose "API Key".</li>
+                <li>Copy the generated API key.</li>
+                <li>**Important:** Restrict your API key to "HTTP referrers (web sites)" if you intend to secure it, but for Stremio, it's often used client-side. For this add-on, it's passed server-side. For simplicity, just generating the key is enough for initial setup.</li>
+            </ol>
         </div>
     </div>
+
+    <script>
+        function generateLink() {
+            const apiKey = document.getElementById('youtubeApiKey').value.trim();
+            const copyMessage = document.getElementById('copyMessage');
+            copyMessage.textContent = ''; // Clear previous messages
+
+            if (!apiKey) {
+                copyMessage.textContent = 'Please enter your YouTube Data API Key.';
+                copyMessage.style.color = '#ff6666'; // Red color for error
+                return;
+            }
+
+            // Basic validation
+            if (apiKey.length < 30) {
+                copyMessage.textContent = 'The API key seems too short. Please double-check it.';
+                copyMessage.style.color = '#ff6666';
+                return;
+            }
+
+            // Get the base URL of the current page (e.g., https://hfuser-tubesearch.hf.space)
+            const baseUrl = window.location.origin;
+            const manifestUrl = `${baseUrl}/manifest.json?youtubeApiKey=${encodeURIComponent(apiKey)}`;
+
+            document.getElementById('installLink').textContent = manifestUrl;
+            document.getElementById('installLinkContainer').style.display = 'block';
+            
+            // Optionally, copy to clipboard immediately after generation
+            copyLink();
+        }
+
+        function copyLink() {
+            const installLink = document.getElementById('installLink');
+            const copyMessage = document.getElementById('copyMessage');
+            
+            if (!installLink.textContent) {
+                copyMessage.textContent = 'No link to copy yet. Please generate it first.';
+                copyMessage.style.color = '#ff6666';
+                return;
+            }
+
+            // Use Clipboard API for modern browsers
+            navigator.clipboard.writeText(installLink.textContent)
+                .then(() => {
+                    copyMessage.textContent = 'Link copied to clipboard!';
+                    copyMessage.style.color = '#4CAF50'; // Green color for success
+                })
+                .catch(err => {
+                    // Fallback for older browsers (less reliable)
+                    const textArea = document.createElement("textarea");
+                    textArea.value = installLink.textContent;
+                    textArea.style.position = "fixed"; // Avoid scrolling to bottom
+                    textArea.style.left = "-9999px"; // Hide from view
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        copyMessage.textContent = 'Link copied to clipboard (fallback)!';
+                        copyMessage.style.color = '#4CAF50';
+                    } catch (err) {
+                        copyMessage.textContent = 'Failed to copy link. Please copy manually.';
+                        copyMessage.style.color = '#ff6666';
+                    } finally {
+                        document.body.removeChild(textArea);
+                    }
+                });
+        }
+    </script>
 </body>
 </html>
