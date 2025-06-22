@@ -57,20 +57,23 @@ app.get('/stream/:type/:id.json', async (req, res) => {
 
 // --- Custom Configuration Page Route ---
 
+// Redirect root path to /configure
+app.get('/', (req, res) => {
+    res.redirect('/configure');
+});
+
 // Explicitly serve configure.html for the /configure path
 app.get('/configure', (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Needed if configure page is called from Stremio
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
 // Serve other static assets from the 'public' directory
-// This should be placed after specific routes like /configure
 app.use(express.static(path.join(__dirname, 'public')));
 
 
 // Fallback for any other request not handled by specific routes
-// If a request falls through all specific routes and static files, it's a 404
 app.get('*', (req, res) => {
     res.status(404).send('Not Found');
 });
