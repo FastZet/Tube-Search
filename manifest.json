@@ -1,0 +1,26 @@
+{
+  "id": "community.tubesearch.addon",
+  "version": "1.0.0",
+  "name": "Tube Search",
+  "description": "Search YouTube videos with filters for duration and resolution. Requires a user-provided YouTube Data API Key.",
+  "resources": ["catalog", "stream"],
+  "types": ["movie"],
+  "catalogs": [
+    {
+      "type": "movie",
+      "id": "tube_search_catalog",
+      "name": "Tube Search",
+      "extra": [
+        { "name": "search", "isRequired": true },
+        { "name": "duration", "options": ["any", "short", "medium", "long"], "isRequired": false },
+        { "name": "resolution", "options": ["any", "sd", "hd", "fullhd"], "isRequired": false }
+      ]
+    }
+  ],
+  "idPrefixes": ["yt_"],
+  "behaviorHints": {
+    "configurable": true,
+    "configurationRequired": true,
+    "has//configure": true
+  }
+}
