@@ -5,7 +5,7 @@ const manifest = require('./manifest.json'); // Still need manifest for its base
 
 const app = express();
 
-// --- Helper function for fetching TMDb and YouTube data (moved from youtubeAddon.js) ---
+// --- Helper function for fetching TMDb and YouTube data ---
 async function getStreamsForContent(type, id, config) {
     const { youtubeApiKey, tmdbApiKey, maxStreams, videoDuration, videoSort } = config;
 
@@ -66,8 +66,8 @@ async function getStreamsForContent(type, id, config) {
 
         const streams = youtubeResponse.data.items.map(item => ({
             title: item.snippet.title,
-            url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
-            externalUrl: `https://www.youtube.com/watch?v=${item.id.videoId}`, // For displaying in Stremio
+            // Use standard YouTube watch URL for externalUrl
+            externalUrl: `https://www.youtube.com/watch?v=${item.id.videoId}`, 
             ytId: item.id.videoId, // Optional: for internal use
             thumbnail: item.snippet.thumbnails.high.url // Optional: for displaying in Stremio
         }));
@@ -110,7 +110,8 @@ app.get('/manifest.json', (req, res) => {
 
   // Attach configuration to the manifest (this is how Stremio sends it to streams)
   const configuredManifest = { ...manifest };
-  configuredManifest.id = configuredManifest.id + `_${youtubeApiKey.substring(0,5)}_${tmdbApiKey.substring(0,5)}_${maxStreams}_${videoDuration}_${videoSort}`; // Create unique ID for Stremio caching
+  // Create unique ID for Stremio caching based on config
+  configuredManifest.id = configuredManifest.id + `_${youtubeApiKey.substring(0,5)}_${tmdbApiKey.substring(0,5)}_${maxStreams}_${videoDuration}_${videoSort}`; 
   configuredManifest.name = configuredManifest.name + ` (Configured)`;
   configuredManifest.config = {
     youtubeApiKey,
@@ -145,7 +146,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
     
     console.log(`[Server Log] Parsed stream arguments: ${JSON.stringify({ type, id })} with config: ${JSON.stringify(config)}`); 
     
-    // Call the moved helper function
+    // Call the helper function to get streams
     const result = await getStreamsForContent(type, id, config); 
     
     console.log(`[Server Log] Stream handler returned result: ${result.streams ? result.streams.length + ' streams' : result.error}`); 
