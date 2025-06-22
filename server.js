@@ -5,13 +5,37 @@ const manifest = require('./manifest.json');
 
 const { getTubeSearchHandlers } = require('./youtubeAddon');
 
+// Initialize the addon builder with your manifest
 const builder = new addonBuilder(manifest);
+console.log('[Server Log] Builder initialized.');
+console.log('[Server Log] Manifest resources:', manifest.resources); // Check resources from manifest file
 
-// Call getTubeSearchHandlers BEFORE getting the interface
+// Define the handlers on the builder
 getTubeSearchHandlers(builder); 
+console.log('[Server Log] getTubeSearchHandlers called.');
 
-// NOW get the interface, after the handlers have been defined on the builder
+// After calling getTubeSearchHandlers, inspect the builder's internal handlers
+// Note: _handlers is an internal property, might not always be present or structured consistently
+console.log('[Server Log] Builder _handlers (internal):', builder._handlers); 
+if (builder._handlers && builder._handlers.stream) {
+    console.log('[Server Log] Stream handler found on builder._handlers.');
+} else {
+    console.error('[Server Log] ERROR: Stream handler NOT found on builder._handlers.');
+}
+
+
+// Get the addon interface from the builder
 const addonInterface = builder.getInterface();
+console.log('[Server Log] addonInterface obtained.');
+
+// Check the structure of the obtained addonInterface
+console.log('[Server Log] addonInterface keys:', Object.keys(addonInterface));
+if (addonInterface.stream) {
+    console.log('[Server Log] addonInterface.stream IS defined.');
+} else {
+    console.error('[Server Log] ERROR: addonInterface.stream is UNDEFINED after getInterface()!');
+}
+
 
 const app = express();
 
@@ -28,15 +52,22 @@ app.get('/manifest.json', (req, res) => {
 app.get('/stream/:type/:id.json', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
-  console.log(`[Server Log] Received stream request for Type: ${req.params.type}, ID: ${req.params.id}`); // Debugging log
+  console.log(`[Server Log] Received stream request for Type: ${req.params.type}, ID: ${req.params.id}`); 
   try {
     const args = {
       type: req.params.type,
       id: req.params.id,
     };
-    console.log(`[Server Log] Parsed stream arguments: ${JSON.stringify(args)}`); // Debugging log
-    const result = await addonInterface.stream.get(args); // THIS IS LINE 36 (now different line number after reordering)
-    console.log(`[Server Log] Stream handler returned result: ${result.streams ? result.streams.length + ' streams' : result}`); // Debugging log
+    console.log(`[Server Log] Parsed stream arguments: ${JSON.stringify(args)}`); 
+    
+    // Check addonInterface.stream before calling get() to prevent the TypeError
+    if (!addonInterface.stream) {
+        console.error('[Server Log] FATAL ERROR: addonInterface.stream is missing during request handling!');
+        return res.status(500).json({ err: 'Add-on not fully initialized. Stream handler missing.' });
+    }
+
+    const result = await addonInterface.stream.get(args); 
+    console.log(`[Server Log] Stream handler returned result: ${result.streams ? result.streams.length + ' streams' : result}`); 
     res.json(result);
   } catch (error) {
     console.error('[Server Log] Stream handler error:', error);
