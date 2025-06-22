@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tube Search Add-on Configuration</title>
+    <title>YouTube Stream Provider Configuration</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -22,7 +22,7 @@
             padding: 30px;
             border-radius: 8px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-            max-width: 600px;
+            max-width: 650px; /* Slightly wider */
             width: 100%;
             text-align: center;
         }
@@ -36,21 +36,30 @@
             line-height: 1.5;
             font-size: 0.95em;
         }
+        .input-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
         label {
             display: block;
             margin-bottom: 8px;
             font-weight: bold;
-            text-align: left;
         }
-        input[type="text"] {
+        input[type="text"], input[type="number"], select {
             width: calc(100% - 20px);
             padding: 10px;
-            margin-bottom: 20px;
             border: 1px solid #444;
             border-radius: 4px;
             background-color: #333;
             color: #f0f0f0;
             font-size: 1em;
+        }
+        select {
+            appearance: none; /* Remove default arrow in some browsers */
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20255%20255%22%3E%3Cpolygon%20points%3D%220%2C0%20127.5%2C127.5%20255%2C0%22%20fill%3D%22%23f0f0f0%22%2F%3E%3C%2Fsvg%3E'); /* Custom arrow */
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 12px;
         }
         button {
             background-color: #4CAF50;
@@ -102,6 +111,7 @@
             margin-left: 10px;
             padding: 8px 15px;
             font-size: 0.9em;
+            flex-shrink: 0; /* Prevent button from shrinking */
         }
         .copy-button:hover {
             background-color: #0056b3;
@@ -115,12 +125,41 @@
 </head>
 <body>
     <div class="container">
-        <h1>Configure Tube Search Add-on</h1>
-        <p>This add-on requires a YouTube Data API Key to function. Please obtain your key and enter it below to generate your personalized installation link.</p>
+        <h1>YouTube Stream Provider Configuration</h1>
+        <p>This add-on provides YouTube streams for movies and shows. It requires API keys and allows you to customize stream results.</p>
 
         <div class="input-group">
             <label for="youtubeApiKey">Your YouTube Data API Key:</label>
-            <input type="text" id="youtubeApiKey" placeholder="Enter your API key here..." required>
+            <input type="text" id="youtubeApiKey" placeholder="Enter your YouTube API key..." required>
+        </div>
+
+        <div class="input-group">
+            <label for="tmdbApiKey">Your TMDb API Key (v3):</label>
+            <input type="text" id="tmdbApiKey" placeholder="Enter your TMDb API key..." required>
+        </div>
+
+        <div class="input-group">
+            <label for="maxStreams">Max Number of Streams to show:</label>
+            <input type="number" id="maxStreams" value="5" min="1" max="20">
+        </div>
+
+        <div class="input-group">
+            <label for="videoDuration">Video Duration Filter:</label>
+            <select id="videoDuration">
+                <option value="any">Any Duration</option>
+                <option value="short">Short (&lt; 4 min)</option>
+                <option value="medium">Medium (4 - 20 min)</option>
+                <option value="long">Long (&gt; 20 min)</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label for="videoSort">Video Sorting Order:</label>
+            <select id="videoSort">
+                <option value="relevance">Relevance</option>
+                <option value="date">Date Uploaded (Newest)</option>
+                <option value="viewCount">Most Views</option>
+            </select>
         </div>
 
         <button onclick="generateLink()">Generate Install Link</button>
@@ -134,49 +173,66 @@
         </div>
 
         <div class="instructions">
-            <h3>How to get your YouTube Data API Key:</h3>
+            <h3>How to get your API Keys:</h3>
+            <h4>YouTube Data API Key:</h4>
             <ol>
                 <li>Go to the <a href="https://console.developers.google.com/apis/dashboard" target="_blank">Google Cloud Console API Dashboard</a>.</li>
-                <li>Log in with your Google account.</li>
-                <li>Create a new project (or select an existing one).</li>
-                <li>In the "APIs & Services" section, go to "Library".</li>
-                <li>Search for "YouTube Data API v3" and enable it for your project.</li>
-                <li>Go to "Credentials" on the left sidebar.</li>
-                <li>Click "CREATE CREDENTIALS" and choose "API Key".</li>
-                <li>Copy the generated API key.</li>
-                <li>**Important:** Restrict your API key to "HTTP referrers (web sites)" if you intend to secure it, but for Stremio, it's often used client-side. For this add-on, it's passed server-side. For simplicity, just generating the key is enough for initial setup.</li>
+                <li>Log in, create/select project.</li>
+                <li>In "APIs & Services" -> "Library", search for "YouTube Data API v3" and enable it.</li>
+                <li>Go to "Credentials", click "CREATE CREDENTIALS" and choose "API Key". Copy it.</li>
             </ol>
+            <h4>TMDb API Key (v3):</h4>
+            <ol>
+                <li>Go to <a href="https://www.themoviedb.org/login" target="_blank">The Movie Database (TMDb)</a> and create an account.</li>
+                <li>Log in, then go to your <a href="https://www.themoviedb.org/settings/api" target="_blank">API Settings page</a>.</li>
+                <li>Request a new API Key (v3 Developer).</li>
+                <li>Agree to terms and fill in the application details. Copy your generated API Key.</li>
+            </ol>
+            <p><strong>Important:</strong> Restrict your API keys in their respective consoles for security.</p>
         </div>
     </div>
 
     <script>
         function generateLink() {
-            const apiKey = document.getElementById('youtubeApiKey').value.trim();
+            const youtubeApiKey = document.getElementById('youtubeApiKey').value.trim();
+            const tmdbApiKey = document.getElementById('tmdbApiKey').value.trim();
+            const maxStreams = document.getElementById('maxStreams').value;
+            const videoDuration = document.getElementById('videoDuration').value;
+            const videoSort = document.getElementById('videoSort').value;
+            
             const copyMessage = document.getElementById('copyMessage');
             copyMessage.textContent = ''; // Clear previous messages
 
-            if (!apiKey) {
-                copyMessage.textContent = 'Please enter your YouTube Data API Key.';
-                copyMessage.style.color = '#ff6666'; // Red color for error
+            if (!youtubeApiKey || !tmdbApiKey) {
+                copyMessage.textContent = 'Both YouTube and TMDb API keys are required.';
+                copyMessage.style.color = '#ff6666';
                 return;
             }
 
             // Basic validation
-            if (apiKey.length < 30) {
-                copyMessage.textContent = 'The API key seems too short. Please double-check it.';
+            if (youtubeApiKey.length < 30 || tmdbApiKey.length < 30) {
+                copyMessage.textContent = 'One or both API keys seem too short. Please double-check them.';
                 copyMessage.style.color = '#ff6666';
                 return;
             }
 
             // Get the base URL of the current page (e.g., https://hfuser-tubesearch.hf.space)
             const baseUrl = window.location.origin;
-            const manifestUrl = `${baseUrl}/manifest.json?youtubeApiKey=${encodeURIComponent(apiKey)}`;
+            
+            // Construct the manifest URL with all parameters
+            const params = new URLSearchParams();
+            params.append('youtubeApiKey', youtubeApiKey);
+            params.append('tmdbApiKey', tmdbApiKey);
+            params.append('maxStreams', maxStreams);
+            params.append('videoDuration', videoDuration);
+            params.append('videoSort', videoSort);
+
+            const manifestUrl = `${baseUrl}/manifest.json?${params.toString()}`;
 
             document.getElementById('installLink').textContent = manifestUrl;
             document.getElementById('installLinkContainer').style.display = 'block';
             
-            // Optionally, copy to clipboard immediately after generation
-            copyLink();
+            copyLink(); // Optionally, copy to clipboard immediately
         }
 
         function copyLink() {
@@ -189,18 +245,16 @@
                 return;
             }
 
-            // Use Clipboard API for modern browsers
             navigator.clipboard.writeText(installLink.textContent)
                 .then(() => {
                     copyMessage.textContent = 'Link copied to clipboard!';
-                    copyMessage.style.color = '#4CAF50'; // Green color for success
+                    copyMessage.style.color = '#4CAF50';
                 })
                 .catch(err => {
-                    // Fallback for older browsers (less reliable)
                     const textArea = document.createElement("textarea");
                     textArea.value = installLink.textContent;
-                    textArea.style.position = "fixed"; // Avoid scrolling to bottom
-                    textArea.style.left = "-9999px"; // Hide from view
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-9999px";
                     document.body.appendChild(textArea);
                     textArea.focus();
                     textArea.select();
