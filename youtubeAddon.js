@@ -1,7 +1,7 @@
-const axios = require('axios'); // For making HTTP requests to YouTube API
+const axios = require('axios'); // For making HTTP requests to YouTube and TMDb APIs
 
-const YOUTUBE_EMBED_URL_PREFIX = 'https://www.youtube.com/watch?v=';
-const YOUTUBE_STREAM_SERVER = 'https://www.youtube.com/watch?v=VIDEO_ID'; // A common way Stremio handles YouTube streams
+// Constants for YouTube stream handling
+const YOUTUBE_STREAM_SERVER = 'https://www.youtube.com/watch?v=VIDEO_ID'; // Used for direct playback in Stremio
 
 /**
  * Maps Stremio's duration filter options to YouTube Data API's videoDuration values.
@@ -18,120 +18,153 @@ function mapDuration(stremioDuration) {
             return 'long'; // > 20 minutes
         case 'any':
         default:
-            return undefined; // No filter applied
+            return undefined; // No specific duration filter
     }
 }
 
 /**
- * Maps Stremio's resolution filter options to YouTube Data API's videoDefinition values.
- * @param {string} stremioResolution
- * @returns {string|undefined} YouTube API videoDefinition value or undefined if 'any'
+ * Maps custom sort options to YouTube Data API's 'order' parameter.
+ * @param {string} stremioSort
+ * @returns {string} YouTube API 'order' value
  */
-function mapResolution(stremioResolution) {
-    switch (stremioResolution) {
-        case 'sd':
-            return 'standard'; // Standard definition
-        case 'hd':
-        case 'fullhd': // YouTube API treats HD and Full HD as 'high'
-            return 'high'; // High definition
-        case 'any':
+function mapSortOrder(stremioSort) {
+    switch (stremioSort) {
+        case 'date':
+            return 'date'; // Most recently uploaded
+        case 'viewCount':
+            return 'viewCount'; // Most views
+        case 'relevance':
         default:
-            return undefined; // No filter applied
+            return 'relevance'; // Default, most relevant
     }
 }
 
 /**
- * Defines the catalog and stream handlers for the Tube Search Stremio Add-on.
- * @param {object} builder - The Stremio AddonBuilder instance.
+ * Fetches movie/series details from TMDb using an IMDb ID.
+ * @param {string} imdbId - The IMDb ID (e.g., 'tt0133093')
+ * @param {string} tmdbApiKey - Your TMDb API key
+ * @returns {Promise<object|null>} Object containing title/name, or null if not found
  */
+async function getTmdbDetails(imdbId, tmdbApiKey) {
+    const tmdbFindUrl = `https://api.themoviedb.org/3/find/${imdbId}`;
+    try {
+        const response = await axios.get(tmdbFindUrl, {
+            params: {
+                api_key: tmdbApiKey,
+                external_source: 'imdb_id'
+            }
+        });
+
+        const data = response.data;
+
+        // TMDb find API returns results in different arrays
+        if (data.movie_results && data.movie_results.length > 0) {
+            return { type: 'movie', title: data.movie_results[0].title, year: data.movie_results[0].release_date ? new Date(data.movie_results[0].release_date).getFullYear() : undefined };
+        } else if (data.tv_results && data.tv_results.length > 0) {
+            return { type: 'series', title: data.tv_results[0].name, year: data.tv_results[0].first_air_date ? new Date(data.tv_results[0].first_air_date).getFullYear() : undefined };
+        }
+        // Episode results are complex and often require TV show ID + season/episode number lookup
+        // For simplicity, we won't directly map episode IMDb IDs to Youtube for now.
+        // If args.type is 'episode', we should attempt to get series title instead if possible.
+        // For this version, we'll focus on movie/series titles.
+
+        return null; // No movie or TV show found
+    } catch (error) {
+        console.error(`[Addon Log] TMDb API Error for IMDb ID ${imdbId}:`, error.message);
+        if (error.response && error.response.data) {
+            console.error('TMDb Error Details:', error.response.data);
+        }
+        return null;
+    }
+}
+
+
 function getTubeSearchHandlers(builder) {
 
-    // Define the catalog handler for search requests
-    builder.defineCatalogHandler(async (args) => {
-        // Read the YouTube API key from args.config (provided by Stremio after user input)
-        const { config } = args;
-        const { youtubeApiKey } = config || {};
+    // Removed defineCatalogHandler as this is a stream provider now
 
-        console.log(`[Addon Log] Catalog handler invoked. Arguments received: ${JSON.stringify(args)}`); // Debugging log
-        console.log(`[Addon Log] Extracted youtubeApiKey: ${youtubeApiKey ? 'Key available (masked)' : 'Key missing/undefined'}`); // Debugging log (don't log actual key)
+    builder.defineStreamHandler(async (args) => {
+        // Get API keys and configurations from the Stremio install URL
+        const { id, type, config } = args;
+        const { youtubeApiKey, tmdbApiKey, maxStreams, videoDuration, videoSort } = config || {};
 
-        // Check if API key is provided
-        if (!youtubeApiKey) {
-            console.warn('YouTube API Key not provided by user in Stremio configuration.');
-            // Stremio might show a more user-friendly error if this is returned as 'err'
-            return Promise.resolve({ metas: [], err: 'YouTube API Key is missing. Please configure the add-on.' });
+        console.log(`[Addon Log] Stream handler invoked. Args: ${JSON.stringify(args)}`);
+        console.log(`[Addon Log] Configured keys/params: YouTube Key: ${youtubeApiKey ? 'Available' : 'Missing'}, TMDb Key: ${tmdbApiKey ? 'Available' : 'Missing'}, Max Streams: ${maxStreams}, Duration: ${videoDuration}, Sort: ${videoSort}`);
+
+        // --- 1. Validate Configuration ---
+        if (!youtubeApiKey || !tmdbApiKey) {
+            console.warn('API Keys not provided by user in Stremio configuration.');
+            return Promise.resolve({ streams: [], err: 'YouTube or TMDb API Key is missing. Please configure the add-on.' });
         }
 
-        const { search } = args; // 'search' is now the primary arg for query
-        
-        // Apply filters from args.extra
-        const durationFilter = mapDuration(args.extra && args.extra.duration);
-        const resolutionFilter = mapResolution(args.extra && args.extra.resolution);
+        // --- 2. Get Movie/Show Title from TMDb using IMDb ID ---
+        let searchQuery = '';
+        if (id.startsWith('tt')) { // Check if it's an IMDb ID
+            const tmdbDetails = await getTmdbDetails(id, tmdbApiKey);
+            if (tmdbDetails) {
+                searchQuery = tmdbDetails.title;
+                // Append year to make search more accurate if available
+                if (tmdbDetails.year) {
+                    searchQuery += ` ${tmdbDetails.year}`;
+                }
+                console.log(`[Addon Log] TMDb lookup successful. Search query for YouTube: "${searchQuery}"`);
+            } else {
+                console.warn(`[Addon Log] TMDb lookup failed for IMDb ID: ${id}. Cannot find title.`);
+                return Promise.resolve({ streams: [], err: `Could not find details for ${id} on TMDb.` });
+            }
+        } else {
+            console.warn(`[Addon Log] Received non-IMDb ID: ${id}. Cannot process without IMDb ID.`);
+            return Promise.resolve({ streams: [], err: `Only IMDb IDs are supported for stream lookup.` });
+        }
 
+        // --- 3. Search YouTube ---
         const youtubeApiUrl = 'https://www.googleapis.com/youtube/v3/search';
         const params = {
             key: youtubeApiKey,
-            part: 'snippet', // Request snippet for title, description, thumbnails
-            q: search,
+            part: 'snippet',
+            q: `${searchQuery} trailer OR full movie OR official clip`, // Broaden search to find relevant video types
             type: 'video', // Only search for videos
-            maxResults: 20 // Limit results to avoid excessive quota usage
+            maxResults: parseInt(maxStreams, 10) || 5, // Use configurable maxStreams, default to 5
+            videoDuration: mapDuration(videoDuration),
+            order: mapSortOrder(videoSort)
         };
 
-        // Add optional filters if they are defined
-        if (durationFilter) {
-            params.videoDuration = durationFilter;
-        }
-        if (resolutionFilter) {
-            params.videoDefinition = resolutionFilter;
-        }
+        // Clean up undefined params
+        Object.keys(params).forEach(key => params[key] === undefined && delete params[key]);
 
-        console.log(`[Addon Log] Attempting YouTube API call with params (key excluded): ${JSON.stringify({ ...params, key: youtubeApiKey ? '********' : undefined })}`); // Debugging log (mask key)
+        console.log(`[Addon Log] Attempting YouTube API call with params (key excluded): ${JSON.stringify({ ...params, key: youtubeApiKey ? '********' : undefined })}`);
         try {
             const response = await axios.get(youtubeApiUrl, { params });
-            console.log(`[Addon Log] YouTube API call successful. Items received: ${response.data.items ? response.data.items.length : 0}`); // Debugging log
+            console.log(`[Addon Log] YouTube API call successful. Items received: ${response.data.items ? response.data.items.length : 0}`);
             const items = response.data.items || [];
 
-            const metas = items.map(item => ({
-                id: `yt_${item.id.videoId}`, // Stremio ID prefix
-                type: 'movie', // Consistent with manifest
-                name: item.snippet.title,
-                poster: item.snippet.thumbnails.high.url, // High-quality thumbnail
+            const streams = items.map(item => ({
+                name: `YouTube: ${item.snippet.title}`,
                 description: item.snippet.description || 'No description available.',
-                background: item.snippet.thumbnails.maxres ? item.snippet.thumbnails.maxres.url : item.snippet.thumbnails.high.url, // Use maxres if available
-                releaseInfo: item.snippet.publishTime ? new Date(item.snippet.publishTime).getFullYear().toString() : undefined
+                url: `${YOUTUBE_STREAM_SERVER}/${item.id.videoId}`, // For direct playback in Stremio
+                externalUrl: `https://www.youtube.com/watch?v=${item.id.videoId}`, // For opening in YouTube app
+                yt_video_id: item.id.videoId, // Custom field for potential future use or debugging
+                published: item.snippet.publishedAt // Optional: can be used for sorting/display
             }));
 
-            return Promise.resolve({ metas });
+            if (streams.length === 0) {
+                console.log(`[Addon Log] No YouTube streams found for "${searchQuery}".`);
+                return Promise.resolve({ streams: [], err: `No YouTube streams found for "${searchQuery}".` });
+            }
+
+            console.log(`[Addon Log] Returning ${streams.length} streams.`);
+            return Promise.resolve({ streams });
 
         } catch (error) {
-            console.error('[Addon Log] Error fetching from YouTube API:', error.message); // Debugging log
+            console.error('[Addon Log] Error fetching from YouTube API:', error.message);
             if (error.response && error.response.data && error.response.data.error) {
-                console.error('[Addon Log] YouTube API Error Details:', error.response.data.error); // Debugging log
-                // Return a user-friendly error if API key is invalid or quota is exceeded
+                console.error('[Addon Log] YouTube API Error Details:', error.response.data.error);
                 if (error.response.data.error.code === 403 || error.response.data.error.code === 400) {
-                     return Promise.resolve({ metas: [], err: 'YouTube API Error: Please check your API key (invalid or quota exceeded).' });
+                     return Promise.resolve({ streams: [], err: 'YouTube API Error: Please check your API key (invalid or quota exceeded).' });
                 }
             }
-            return Promise.resolve({ metas: [], err: 'Failed to search YouTube. Please try again later.' });
+            return Promise.resolve({ streams: [], err: 'Failed to search YouTube streams. Please try again later.' });
         }
-    });
-
-    // Define the stream handler
-    builder.defineStreamHandler(async (args) => {
-        const { id } = args;
-        const videoId = id.replace('yt_', ''); // Remove our prefix
-
-        if (!videoId) {
-            return Promise.resolve({ streams: [] });
-        }
-
-        const streams = [{
-            url: `${YOUTUBE_STREAM_SERVER}/${videoId}`,
-            title: 'YouTube Stream',
-            description: `Plays directly from YouTube.`
-        }];
-
-        return Promise.resolve({ streams });
     });
 }
 
