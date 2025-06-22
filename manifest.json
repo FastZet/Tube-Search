@@ -2,7 +2,7 @@
   "id": "community.tubesearch.addon",
   "version": "1.0.0",
   "name": "Tube Search",
-  "description": "Search YouTube videos with filters for duration and resolution. Requires a deployer-provided YouTube Data API Key.",
+  "description": "Search YouTube videos with filters for duration and resolution. Requires a user-provided YouTube Data API Key.",
   "resources": ["catalog", "stream"],
   "types": ["movie"],
   "catalogs": [
@@ -21,6 +21,6 @@
   "behaviorHints": {
     "configurable": false,
     "configurationRequired": false,
-    "has//configure": true
+    "has and creates //configure": true
   }
 }
