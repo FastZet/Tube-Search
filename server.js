@@ -65,11 +65,17 @@ async function getStreamsForContent(type, id, config) {
         }
 
         const streams = youtubeResponse.data.items.map(item => ({
-            title: item.snippet.title,
-            // Use standard YouTube watch URL for externalUrl
+            // Improved title for clarity
+            title: `▶️ ${item.snippet.title} (Open on YouTube)`, 
+            // Optional: Add more descriptive info
+            // description: `Uploaded by: ${item.snippet.channelTitle}\nPublished: ${new Date(item.snippet.publishedAt).toLocaleDateString()}`,
             externalUrl: `https://www.youtube.com/watch?v=${item.id.videoId}`, 
-            ytId: item.id.videoId, // Optional: for internal use
-            thumbnail: item.snippet.thumbnails.high.url // Optional: for displaying in Stremio
+            ytId: item.id.videoId, 
+            thumbnail: item.snippet.thumbnails.high.url,
+            // Explicitly hint to Stremio to open externally
+            behaviorHints: {
+                externalUrl: true 
+            }
         }));
 
         console.log(`[Addon Log] Found ${streams.length} YouTube streams.`);
