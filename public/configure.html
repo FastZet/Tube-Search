@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tube Search Add-on Configuration</title>
+    <title>Tube Search Add-on Information</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -36,100 +36,34 @@
             line-height: 1.5;
             font-size: 0.95em;
         }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-            text-align: left;
-        }
-        input[type="text"] {
-            width: calc(100% - 20px);
-            padding: 10px;
-            margin-bottom: 20px;
-            border: 1px solid #444;
-            border-radius: 4px;
-            background-color: #333;
-            color: #f0f0f0;
-            font-size: 1em;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px 25px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1.1em;
-            transition: background-color 0.3s ease;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .instructions {
+        .info-block {
             text-align: left;
             margin-top: 25px;
             padding-top: 20px;
             border-top: 1px solid #333;
-            font-size: 0.85em;
+            font-size: 0.9em;
             color: #aaa;
         }
-        .instructions a {
+        .info-block a {
             color: #66b2ff;
             text-decoration: none;
         }
-        .instructions a:hover {
+        .info-block a:hover {
             text-decoration: underline;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Configure Tube Search Add-on</h1>
-        <p>This add-on requires a YouTube Data API Key to function. Please follow the instructions below to obtain your key and enter it here.</p>
+        <h1>Tube Search Add-on</h1>
+        <p>This Stremio add-on allows you to search YouTube videos with advanced filters for duration and resolution directly within Stremio.</p>
 
-        <div class="input-group">
-            <label for="youtubeApiKey">Your YouTube Data API Key:</label>
-            <input type="text" id="youtubeApiKey" placeholder="Enter your API key here..." required>
-        </div>
-
-        <button onclick="configureAddon()">Save & Install</button>
-
-        <div class="instructions">
-            <h3>How to get your YouTube Data API Key:</h3>
-            <ol>
-                <li>Go to the <a href="https://console.developers.google.com/apis/dashboard" target="_blank">Google Cloud Console API Dashboard</a>.</li>
-                <li>Log in with your Google account.</li>
-                <li>Create a new project (or select an existing one).</li>
-                <li>In the "APIs & Services" section, go to "Library".</li>
-                <li>Search for "YouTube Data API v3" and enable it for your project.</li>
-                <li>Go to "Credentials" on the left sidebar.</li>
-                <li>Click "CREATE CREDENTIALS" and choose "API Key".</li>
-                <li>Copy the generated API key.</li>
-                <li>**Important:** Restrict your API key to "HTTP referrers (web sites)" if your add-on URL is known, or keep it unrestricted for easier setup (less secure). For this add-on, it's used server-side, so IP restrictions are often more appropriate if you were managing a single key; for user-provided keys, they handle their own restrictions. For simplicity, just generating the key is enough for initial setup.</li>
-            </ol>
+        <div class="info-block">
+            <h3>Important Information:</h3>
+            <p>This add-on requires a **YouTube Data API Key** to function. This key is provided by the add-on's deployer (administrator), not by individual users.</p>
+            <p>If you are the deployer, ensure the `YOUTUBE_API_KEY` environment variable is set in your deployment environment (e.g., Hugging Face Space secrets).</p>
+            <p>For more details or to report issues, please visit the <a href="https://github.com/your-username/your-repo-name" target="_blank">add-on's GitHub repository</a>.</p>
         </div>
     </div>
-
-    <script>
-        function configureAddon() {
-            const apiKey = document.getElementById('youtubeApiKey').value.trim();
-
-            if (!apiKey) {
-                alert('Please enter your YouTube Data API Key.');
-                return;
-            }
-
-            // Basic validation: API keys are typically long strings
-            if (apiKey.length < 30) { // A rough check, actual length varies but is significant
-                alert('The API key seems too short. Please double-check it.');
-                return;
-            }
-
-            // This is the crucial part: sending the configuration back to Stremio
-            window.postMessage({
-                addon_config: { youtubeApiKey: apiKey }
-            }, "*");
-        }
-    </script>
 </body>
 </html>
