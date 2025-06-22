@@ -24,13 +24,16 @@ app.get('/manifest.json', (req, res) => {
 app.get('/catalog/:type/:id/:extra?', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
+  console.log(`[Server Log] Received catalog request for Type: ${req.params.type}, ID: ${req.params.id}, Extra: ${req.params.extra}`); // Debugging log
   try {
     const args = {
       type: req.params.type,
       id: req.params.id,
       extra: req.params.extra ? JSON.parse(req.params.extra) : {},
     };
+    console.log(`[Server Log] Parsed catalog arguments: ${JSON.stringify(args)}`); // Debugging log
     const result = await addonInterface.catalog.get(args);
+    console.log(`[Server Log] Catalog handler returned result: ${JSON.stringify(result.metas ? result.metas.length + ' metas' : result)}`); // Debugging log
     res.json(result);
   } catch (error) {
     console.error('Catalog handler error:', error);
