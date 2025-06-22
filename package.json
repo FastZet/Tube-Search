@@ -1,0 +1,27 @@
+{
+  "name": "tube-search-stremio-addon",
+  "version": "1.0.0",
+  "description": "A Stremio add-on to search YouTube videos with duration and resolution filters.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "stremio",
+    "addon",
+    "youtube",
+    "search",
+    "video"
+  ],
+  "author": "FastZet",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "express": "^4.19.2",
+    "stremio-addon-sdk": "^1.6.10"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
