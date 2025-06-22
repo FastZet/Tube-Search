@@ -1,12 +1,16 @@
 const express = require('express');
 const { addonBuilder } = require('stremio-addon-sdk');
 const path = require('path');
-const manifest = require('./manifest.json'); // This will now be the updated manifest
+const manifest = require('./manifest.json');
 
-const { getTubeSearchHandlers } = require('./youtubeAddon'); // This will be the updated youtubeAddon
+const { getTubeSearchHandlers } = require('./youtubeAddon');
 
 const builder = new addonBuilder(manifest);
-getTubeSearchHandlers(builder);
+
+// Call getTubeSearchHandlers BEFORE getting the interface
+getTubeSearchHandlers(builder); 
+
+// NOW get the interface, after the handlers have been defined on the builder
 const addonInterface = builder.getInterface();
 
 const app = express();
@@ -20,20 +24,18 @@ app.get('/manifest.json', (req, res) => {
   res.json(manifest);
 });
 
-// Removed /catalog handler as it's a stream provider now
-
 // Handle Stream requests
 app.get('/stream/:type/:id.json', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
-  console.log(`[Server Log] Received stream request for Type: ${req.params.type}, ID: ${req.params.id}`); // Debugging log for stream requests
+  console.log(`[Server Log] Received stream request for Type: ${req.params.type}, ID: ${req.params.id}`); // Debugging log
   try {
     const args = {
       type: req.params.type,
       id: req.params.id,
     };
     console.log(`[Server Log] Parsed stream arguments: ${JSON.stringify(args)}`); // Debugging log
-    const result = await addonInterface.stream.get(args);
+    const result = await addonInterface.stream.get(args); // THIS IS LINE 36 (now different line number after reordering)
     console.log(`[Server Log] Stream handler returned result: ${result.streams ? result.streams.length + ' streams' : result}`); // Debugging log
     res.json(result);
   } catch (error) {
