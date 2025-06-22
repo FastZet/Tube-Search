@@ -3,26 +3,30 @@ const { addonBuilder } = require('stremio-addon-sdk');
 const path = require('path');
 const manifest = require('./manifest.json');
 
-const { getTubeSearchHandlers } = require('./youtubeAddon');
+// --- Temporarily REMOVE the import for youtubeAddon.js ---
+// const { getTubeSearchHandlers } = require('./youtubeAddon'); 
+// ---
 
 // Initialize the addon builder with your manifest
 const builder = new addonBuilder(manifest);
 console.log('[Server Log] Builder initialized.');
 console.log('[Server Log] Manifest resources:', manifest.resources); // Check resources from manifest file
 
-// Define the handlers on the builder
-getTubeSearchHandlers(builder); 
-console.log('[Server Log] getTubeSearchHandlers called.');
+// --- Directly define the stream handler here for diagnostic purposes ---
+builder.defineStreamHandler(async (args) => {
+    console.log('[Server Log] Direct stream handler executed inside defineStreamHandler.');
+    // For now, we'll just return an empty array of streams to see if the handler registers
+    return Promise.resolve({ streams: [] }); 
+});
+console.log('[Server Log] Direct defineStreamHandler called on builder.');
 
-// After calling getTubeSearchHandlers, inspect the builder's internal handlers
-// Note: _handlers is an internal property, might not always be present or structured consistently
-console.log('[Server Log] Builder _handlers (internal):', builder._handlers); 
+// After direct definition, inspect the builder's internal handlers
+console.log('[Server Log] Builder _handlers (internal) AFTER direct define:', builder._handlers); 
 if (builder._handlers && builder._handlers.stream) {
-    console.log('[Server Log] Stream handler found on builder._handlers.');
+    console.log('[Server Log] Stream handler FOUND on builder._handlers after direct define.');
 } else {
-    console.error('[Server Log] ERROR: Stream handler NOT found on builder._handlers.');
+    console.error('[Server Log] ERROR: Stream handler NOT found on builder._handlers after direct define!');
 }
-
 
 // Get the addon interface from the builder
 const addonInterface = builder.getInterface();
@@ -31,11 +35,10 @@ console.log('[Server Log] addonInterface obtained.');
 // Check the structure of the obtained addonInterface
 console.log('[Server Log] addonInterface keys:', Object.keys(addonInterface));
 if (addonInterface.stream) {
-    console.log('[Server Log] addonInterface.stream IS defined.');
+    console.log('[Server Log] addonInterface.stream IS defined after getInterface().');
 } else {
     console.error('[Server Log] ERROR: addonInterface.stream is UNDEFINED after getInterface()!');
 }
-
 
 const app = express();
 
@@ -60,7 +63,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
     };
     console.log(`[Server Log] Parsed stream arguments: ${JSON.stringify(args)}`); 
     
-    // Check addonInterface.stream before calling get() to prevent the TypeError
+    // Check addonInterface.stream before calling get()
     if (!addonInterface.stream) {
         console.error('[Server Log] FATAL ERROR: addonInterface.stream is missing during request handling!');
         return res.status(500).json({ err: 'Add-on not fully initialized. Stream handler missing.' });
