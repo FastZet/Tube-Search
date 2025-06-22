@@ -5,6 +5,7 @@
   "description": "Provides YouTube streams (trailers, clips, full content) for movies and shows found via other add-ons. Requires YouTube Data API Key and TMDb API Key.",
   "resources": ["stream"],
   "types": ["movie", "series"],
+  "catalogs": [],  
   "behaviorHints": {
     "configurable": false,
     "configurationRequired": false,
