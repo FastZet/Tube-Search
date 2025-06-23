@@ -5,6 +5,32 @@ const manifest = require('./manifest.json');
 
 const app = express();
 
+// Helper function to parse the combined config string
+function parseConfigString(configString) {
+    let tmdbApiKey = '';
+    let omdbApiKey = '';
+    if (configString) {
+        try {
+            const decodedConfigString = decodeURIComponent(configString);
+            const params = decodedConfigString.split('|');
+            params.forEach(param => {
+                const parts = param.split('=');
+                if (parts.length === 2) {
+                    if (parts[0] === 'tmdb') {
+                        tmdbApiKey = parts[1];
+                    } else if (parts[0] === 'omdb') {
+                        omdbApiKey = parts[1];
+                    }
+                }
+            });
+        } catch (e) {
+            console.error('[Addon Log] Error decoding or parsing config string:', e.message);
+        }
+    }
+    return { tmdbApiKey, omdbApiKey };
+}
+
+
 // --- Helper function for fetching TMDb/OMDb data and Google Search ---
 async function getStreamsForContent(type, id, config) {
     const { tmdbApiKey, omdbApiKey } = config;
@@ -20,7 +46,6 @@ async function getStreamsForContent(type, id, config) {
     }
     if (!omdbApiKey) {
         console.warn('[Addon Log] Missing OMDb API key. OMDb fallback will not be used.');
-        // Don't return error here, proceed with TMDb only
     }
 
     let IMDB_ID = null;
@@ -36,7 +61,7 @@ async function getStreamsForContent(type, id, config) {
         const parts = id.split(':');
         rawContentId = parts[0]; // ttXXXXXXX or tmdb:XXXXXXX or XXXXXXX
         IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null;
-        TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null); // Extracts numeric TMDb ID if applicable
+        TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null);
         
         seasonNum = parts[1];
         episodeNum = parts[2];
@@ -44,16 +69,15 @@ async function getStreamsForContent(type, id, config) {
     } else if (type === 'movie') {
         rawContentId = id; // ttXXXXXXX or tmdb:XXXXXXX or XXXXXXX
         IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null;
-        TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null); // Extracts numeric TMDb ID if applicable
+        TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null);
         
         console.log(`[Addon Log] Parsed Movie ID: Original=${id}, IMDB=${IMDB_ID}, TMDB=${TMDB_ID}`);
     }
     
     // Ensure TMDB_ID is null if it's still 'tmdb' or not a number when it should be.
-    // This handles cases where ID is just a number directly or starts with tmdb:
     if (TMDB_ID && isNaN(TMDB_ID) && TMDB_ID.includes(':')) {
         TMDB_ID = TMDB_ID.split(':')[1];
-    } else if (TMDB_ID && isNaN(TMDB_ID) && !TMDB_ID.startsWith('tt')) { // If it's not a tt ID and still not a number (e.g., 'tmdb'), set to null
+    } else if (TMDB_ID && isNaN(TMDB_ID) && !TMDB_ID.startsWith('tt')) {
         TMDB_ID = null;
     }
 
@@ -61,19 +85,19 @@ async function getStreamsForContent(type, id, config) {
     try {
         // --- Step 1: Get TMDb details based on provided ID ---
         if (IMDB_ID) {
-            // Option 1: Try TMDb /find endpoint with IMDb ID (often good for cross-referencing)
+            // Option 1: Try TMDb /find endpoint with IMDb ID
             try {
                 const tmdbFindUrl = `https://api.themoviedb.org/3/find/${IMDB_ID}?api_key=${tmdbApiKey}&external_source=imdb_id`;
                 console.log(`[Addon Log] Trying TMDb find with IMDb ID: ${IMDB_ID}`);
                 const tmdbFindResponse = await axios.get(tmdbFindUrl);
 
                 if (type === 'movie' && tmdbFindResponse.data.movie_results.length > 0) {
-                    TMDB_ID = tmdbFindResponse.data.movie_results[0].id; // Update TMDB_ID from find results
+                    TMDB_ID = tmdbFindResponse.data.movie_results[0].id;
                     queryTitle = tmdbFindResponse.data.movie_results[0].title;
                     queryYear = (new Date(tmdbFindResponse.data.movie_results[0].release_date)).getFullYear();
                     console.log(`[Addon Log] Found movie via TMDb Find: ${queryTitle}`);
                 } else if (type === 'series' && tmdbFindResponse.data.tv_results.length > 0) {
-                    TMDB_ID = tmdbFindResponse.data.tv_results[0].id; // Update TMDB_ID from find results
+                    TMDB_ID = tmdbFindResponse.data.tv_results[0].id;
                     queryTitle = tmdbFindResponse.data.tv_results[0].name;
                     queryYear = (new Date(tmdbFindResponse.data.tv_results[0].first_air_date)).getFullYear();
                     console.log(`[Addon Log] Found series via TMDb Find: ${queryTitle}`);
@@ -110,7 +134,6 @@ async function getStreamsForContent(type, id, config) {
         } 
         
         // If we still don't have a title, but we have a TMDB_ID (e.g., from a TMDB catalog addon)
-        // This TMDB_ID would be the numeric one parsed earlier.
         if (TMDB_ID && !queryTitle) {
             const directTmdbUrl = (type === 'movie') ?
                 `https://api.themoviedb.org/3/movie/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids` :
@@ -122,7 +145,6 @@ async function getStreamsForContent(type, id, config) {
                 if (type === 'movie') {
                     queryTitle = directTmdbResponse.data.title;
                     queryYear = (new Date(directTmdbResponse.data.release_date)).getFullYear();
-                    // Also try to get IMDb ID from TMDb external_ids if not already available
                     if (!IMDB_ID && directTmdbResponse.data.external_ids && directTmdbResponse.data.external_ids.imdb_id) {
                         IMDB_ID = directTmdbResponse.data.external_ids.imdb_id;
                         console.log(`[Addon Log] Retrieved IMDb ID from TMDb external_ids: ${IMDB_ID}`);
@@ -130,7 +152,6 @@ async function getStreamsForContent(type, id, config) {
                 } else { // series
                     queryTitle = directTmdbResponse.data.name;
                     queryYear = (new Date(directTmdbResponse.data.first_air_date)).getFullYear();
-                     // Also try to get IMDb ID from TMDb external_ids if not already available
                     if (!IMDB_ID && directTmdbResponse.data.external_ids && directTmdbResponse.data.external_ids.imdb_id) {
                         IMDB_ID = directTmdbResponse.data.external_ids.imdb_id;
                         console.log(`[Addon Log] Retrieved IMDb ID from TMDb external_ids: ${IMDB_ID}`);
@@ -150,7 +171,7 @@ async function getStreamsForContent(type, id, config) {
                 const omdbResponse = await axios.get(omdbUrl);
                 if (omdbResponse.data.Response === 'True') {
                     queryTitle = omdbResponse.data.Title;
-                    queryYear = omdbResponse.data.Year ? parseInt(omdbResponse.data.Year.substring(0,4)) : ''; 
+                    queryYear = omdbResponse.data.Year ? parseInt(omdbResponse.data.Year.substring(0,4)) : '';
                     console.log(`[Addon Log] Found content via OMDb: ${queryTitle}`);
                 } else {
                     console.warn(`[Addon Log] OMDb did not return results for IMDb ID ${IMDB_ID}: ${omdbResponse.data.Error}`);
@@ -211,18 +232,16 @@ async function getStreamsForContent(type, id, config) {
 
 // --- Stremio Add-on API Routes ---
 
-// Serve the manifest.json file directly
-app.get('/manifest.json', (req, res) => {
+// NEW: Manifest route with config string as path parameter
+app.get('/:configString/manifest.json', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
 
-  // Extract query parameters from the request to manifest.json
-  const tmdbApiKey = req.query.tmdbApiKey || '';
-  const omdbApiKey = req.query.omdbApiKey || '';
+  // Parse API keys from the single config string
+  const { tmdbApiKey, omdbApiKey } = parseConfigString(req.params.configString);
 
-  // Attach configuration to the manifest
   const configuredManifest = { ...manifest };
-  // Update unique ID and name
+  // Update unique ID and name using parts of the keys
   configuredManifest.id = configuredManifest.id + `_${tmdbApiKey.substring(0,5)}_${omdbApiKey.substring(0,5)}`; 
   configuredManifest.name = `Tube Search`; 
   configuredManifest.config = {
@@ -233,18 +252,18 @@ app.get('/manifest.json', (req, res) => {
   res.json(configuredManifest);
 });
 
-// Handle Stream requests
-app.get('/stream/:type/:id.json', async (req, res) => {
+// NEW: Stream route with config string as path parameter
+app.get('/:configString/stream/:type/:id.json', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
   
-  const { type, id } = req.params;
+  // Parse API keys from the single config string
+  const { tmdbApiKey, omdbApiKey } = parseConfigString(req.params.configString);
+
+  const { type, id } = req.params; // type and id are still separate path params
   console.log(`[Server Log] Received stream request for Type: ${type}, ID: ${id}`); 
 
   try {
-    // Extract configuration from the request URL
-    const { tmdbApiKey, omdbApiKey } = req.query;
-
     const config = {
         tmdbApiKey,
         omdbApiKey
@@ -252,7 +271,6 @@ app.get('/stream/:type/:id.json', async (req, res) => {
     
     console.log(`[Server Log] Parsed stream arguments: ${JSON.stringify({ type, id })} with config: ${JSON.stringify(config)}`); 
     
-    // Call the helper function to get streams
     const result = await getStreamsForContent(type, id, config); 
     
     console.log(`[Server Log] Stream handler returned result: ${result.streams ? result.streams.length + ' streams' : result.error}`); 
@@ -272,11 +290,13 @@ app.get('/', (req, res) => {
 });
 
 // Explicitly serve configure.html for the /configure path
-app.get('/configure', (req, res) => {
+// This route now also accommodates the config string for pre-filling the form.
+app.get('/:configString?/configure', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
+
 
 // Serve other static assets from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
@@ -292,6 +312,7 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 7860;
 app.listen(PORT, () => {
     console.log(`Tube Search add-on running on port ${PORT}`);
-    console.log(`Manifest URL (example): http://localhost:${PORT}/manifest.json?tmdbApiKey=YOUR_TMDB_KEY&omdbApiKey=YOUR_OMDB_KEY`);
-    console.log(`Configure URL: http://localhost:${PORT}/configure`);
+    // Updated example URL to reflect combined config string
+    console.log(`Manifest URL (example): http://localhost:${PORT}/tmdb=YOUR_TMDB_KEY|omdb=YOUR_OMDB_KEY/manifest.json`);
+    console.log(`Configure URL: http://localhost:${PORT}/configure (or directly with keys: /tmdb=YOUR_TMDB_KEY|omdb=YOUR_OMDB_KEY/configure)`);
 });
