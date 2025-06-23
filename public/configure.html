@@ -26,9 +26,9 @@
             padding: 20px;
             display: flex;
             justify-content: center;
-            align-items: flex-start; /* Align items to the start for better mobile scroll */
+            align-items: flex-start;
             min-height: 100vh;
-            box-sizing: border-box; /* Include padding in element's total width and height */
+            box-sizing: border-box;
         }
 
         .container {
@@ -37,9 +37,9 @@
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
             width: 100%;
-            max-width: 550px; /* Increased max-width slightly */
+            max-width: 550px;
             box-sizing: border-box;
-            margin-top: 20px; /* Add some space from top on larger screens */
+            margin-top: 20px;
         }
 
         h1 {
@@ -51,7 +51,7 @@
         }
 
         .info {
-            background-color: #e6f7ff; /* Lighter blue for info */
+            background-color: #e6f7ff;
             border-left: 4px solid var(--info-color);
             padding: 15px;
             margin-bottom: 25px;
@@ -78,7 +78,7 @@
         }
 
         input[type="text"] {
-            width: calc(100% - 24px); /* Account for padding */
+            width: calc(100% - 24px);
             padding: 12px;
             margin-bottom: 20px;
             border: 1px solid var(--border-color);
@@ -118,13 +118,13 @@
         #installUrl {
             margin-top: 30px;
             word-break: break-all;
-            background-color: #e9f0f7; /* Lighter background for code */
+            background-color: #e9f0f7;
             border: 1px dashed var(--primary-color);
             padding: 15px;
             border-radius: 6px;
             font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
             font-size: 0.9em;
-            text-align: left; /* Align text left inside this block */
+            text-align: left;
             display: none;
             color: var(--text-color);
         }
@@ -137,11 +137,17 @@
         }
         #installUrl code {
             display: block;
-            background-color: #dde8f5; /* Slightly darker code background */
+            background-color: #dde8f5;
             padding: 8px;
             border-radius: 4px;
             margin-top: 10px;
             font-weight: bold;
+        }
+        .warning {
+            color: #dc3545;
+            font-weight: 600;
+            margin-top: 10px;
+            text-align: center;
         }
 
         /* Mobile specific adjustments */
@@ -164,6 +170,9 @@
             .info {
                 font-size: 0.85em;
             }
+            .warning {
+                font-size: 0.85em;
+            }
         }
     </style>
 </head>
@@ -180,6 +189,10 @@
                 Get your OMDb API Key <a href="http://www.omdbapi.com/apikey.aspx" target="_blank">here</a>.
                 (You'll need to create accounts for both if you don't have them).
             </p>
+        </div>
+
+        <div class="warning">
+            <p><strong>Important:</strong> To ensure compatibility with Stremio Android and AIOStreams, your API keys will be part of the add-on URL path. While not highly sensitive, be aware they are visible in the URL.</p>
         </div>
 
         <label for="tmdbApiKey">TMDb API Key:</label>
@@ -207,10 +220,14 @@
                 return;
             }
 
-            // Get the base URL of the current page (your Hugging Face Space URL)
             const baseUrl = window.location.origin;
+            
+            // NEW: Combine keys into a single config string, then URL-encode it
+            const configString = `tmdb=${tmdbApiKey}|omdb=${omdbApiKey}`;
+            const encodedConfigString = encodeURIComponent(configString);
 
-            const manifestUrl = `${baseUrl}/manifest.json?tmdbApiKey=${tmdbApiKey}&omdbApiKey=${omdbApiKey}`;
+            // NEW: Construct the URL with the single config string as a path parameter
+            const manifestUrl = `${baseUrl}/${encodedConfigString}/manifest.json`;
             const installLink = `stremio://` + manifestUrl;
 
             const installUrlDiv = document.getElementById('installUrl');
@@ -220,19 +237,52 @@
                 <p>Or manually add the manifest URL:</p>
                 <code>${manifestUrl}</code>
             `;
-            installUrlDiv.style.display = 'block'; // Show the generated URL
+            installUrlDiv.style.display = 'block';
         }
 
         // Pre-fill fields from URL parameters if available (useful for re-configuring)
         window.onload = function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const tmdbApi = urlParams.get('tmdbApiKey');
-            const omdbApi = urlParams.get('omdbApiKey');
-            if (tmdbApi) {
-                document.getElementById('tmdbApiKey').value = tmdbApi;
-            }
-            if (omdbApi) {
-                document.getElementById('omdbApiKey').value = omdbApi;
+            const pathSegments = window.location.pathname.split('/');
+            // Expected path structure: /<encodedConfigString>/configure OR /configure
+            if (pathSegments.length >= 2 && pathSegments[1].length > 0 && pathSegments[1] !== 'configure') {
+                try {
+                    const encodedConfigString = pathSegments[1];
+                    const decodedConfigString = decodeURIComponent(encodedConfigString);
+                    const params = decodedConfigString.split('|');
+                    let tmdbApi = '';
+                    let omdbApi = '';
+
+                    params.forEach(param => {
+                        const parts = param.split('=');
+                        if (parts.length === 2) {
+                            if (parts[0] === 'tmdb') {
+                                tmdbApi = parts[1];
+                            } else if (parts[0] === 'omdb') {
+                                omdbApi = parts[1];
+                            }
+                        }
+                    });
+
+                    if (tmdbApi) {
+                        document.getElementById('tmdbApiKey').value = tmdbApi;
+                    }
+                    if (omdbApi) {
+                        document.getElementById('omdbApiKey').value = omdbApi;
+                    }
+
+                } catch (e) {
+                    console.error("Error parsing config string from URL:", e);
+                }
+            } else { // Fallback to old query param if present for backward compatibility during update
+                const urlParams = new URLSearchParams(window.location.search);
+                const tmdbApi = urlParams.get('tmdbApiKey');
+                const omdbApi = urlParams.get('omdbApiKey');
+                if (tmdbApi) {
+                    document.getElementById('tmdbApiKey').value = tmdbApi;
+                }
+                if (omdbApi) {
+                    document.getElementById('omdbApiKey').value = omdbApi;
+                }
             }
         };
     </script>
