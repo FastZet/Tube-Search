@@ -7,7 +7,7 @@ const app = express();
 
 // --- Helper function for fetching TMDb data and Google Search ---
 async function getStreamsForContent(type, id, config) {
-    const { tmdbApiKey } = config; // Removed youtubeApiKey as it's no longer needed
+    const { tmdbApiKey } = config;
 
     console.log('[Addon Log] Stream handler invoked with config:', {
         tmdbApiKey: tmdbApiKey ? 'Provided' : 'Missing'
@@ -34,7 +34,7 @@ async function getStreamsForContent(type, id, config) {
         console.log(`[Addon Log] Parsed Series ID: IMDB=${IMDB_ID}, TMDB=${TMDB_ID}, S:${seasonNum}, E:${episodeNum}`);
     } else if (type === 'movie') {
         IMDB_ID = id.startsWith('tt') ? id : null;
-        TMDB_ID = (id && !IMDB_ID) ? id : null; // If no tt, assume it's a TMDB ID
+        TMDB_ID = (id && !IMDB_ID) ? id : id.split(':')[0]; // If no tt, assume it's a TMDB ID. Handle tmdb:id format
         console.log(`[Addon Log] Parsed Movie ID: IMDB=${IMDB_ID}, TMDB=${TMDB_ID}`);
     }
 
@@ -90,13 +90,16 @@ async function getStreamsForContent(type, id, config) {
         } 
         
         // If we still don't have a title, but we have a TMDB_ID (e.g., from a TMDB catalog addon)
-        if (TMDB_ID && !queryTitle) {
+        // Ensure TMDB_ID is a number, as it can come as "tmdb:ID" from Stremio
+        const actualTmdbId = TMDB_ID && TMDB_ID.includes(':') ? TMDB_ID.split(':')[1] : TMDB_ID;
+
+        if (actualTmdbId && !queryTitle) {
             const directTmdbUrl = (type === 'movie') ?
-                `https://api.themoviedb.org/3/movie/${TMDB_ID}?api_key=${tmdbApiKey}` :
-                `https://api.themoviedb.org/3/tv/${TMDB_ID}?api_key=${tmdbApiKey}`;
+                `https://api.themoviedb.org/3/movie/${actualTmdbId}?api_key=${tmdbApiKey}` :
+                `https://api.themoviedb.org/3/tv/${actualTmdbId}?api_key=${tmdbApiKey}`;
             
             try {
-                console.log(`[Addon Log] Trying direct TMDb lookup with TMDB ID: ${TMDB_ID}`);
+                console.log(`[Addon Log] Trying direct TMDb lookup with TMDB ID: ${actualTmdbId}`);
                 const directTmdbResponse = await axios.get(directTmdbUrl);
                 if (type === 'movie') {
                     queryTitle = directTmdbResponse.data.title;
@@ -107,7 +110,7 @@ async function getStreamsForContent(type, id, config) {
                 }
                 console.log(`[Addon Log] Found ${type} via direct TMDb ID lookup: ${queryTitle}`);
             } catch (tmdbIdError) {
-                console.error(`[Addon Log] Direct TMDb lookup failed for TMDB ID ${TMDB_ID}: ${tmdbIdError.message}`);
+                console.error(`[Addon Log] Direct TMDb lookup failed for TMDB ID ${actualTmdbId}: ${tmdbIdError.message}`);
             }
         }
 
@@ -127,7 +130,7 @@ async function getStreamsForContent(type, id, config) {
         
         const streams = [];
 
-        // --- NEW: Add Google Search Stream Result (only stream result) ---
+        // --- Add Google Search Stream Result (only stream result) ---
         const googleSearchBaseUrl = "https://www.google.com/search?";
         const googleSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(googleSearchQuery)}&tbs=dur:l&tbm=vid`;
 
@@ -139,7 +142,7 @@ async function getStreamsForContent(type, id, config) {
             }
         });
         console.log('[Addon Log] Added Google Search stream result.');
-        // --- END NEW ---
+        // --- END Google Search ---
 
         return { streams };
 
@@ -170,15 +173,13 @@ app.get('/manifest.json', (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', '*');
 
   // Extract query parameters from the request to manifest.json
-  const tmdbApiKey = req.query.tmdbApiKey || ''; // Removed youtubeApiKey
-  // Other config parameters related to YouTube max streams, duration, sort are also removed
-  // as they are no longer relevant without YouTube API searches.
+  const tmdbApiKey = req.query.tmdbApiKey || '';
 
   // Attach configuration to the manifest
   const configuredManifest = { ...manifest };
   // Update unique ID and name
-  configuredManifest.id = configuredManifest.id + `_${tmdbApiKey.substring(0,5)}_(GoogleSearch)`; 
-  configuredManifest.name = `Tube Search (Google Search)`; 
+  configuredManifest.id = configuredManifest.id + `_${tmdbApiKey.substring(0,5)}_(TMDB)`; // Simplified ID suffix
+  configuredManifest.name = `Tube Search`; // Simplified add-on name
   configuredManifest.config = {
     tmdbApiKey
   };
@@ -196,7 +197,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
 
   try {
     // Extract configuration from the request URL
-    const { tmdbApiKey } = req.query; // Removed youtubeApiKey
+    const { tmdbApiKey } = req.query;
 
     const config = {
         tmdbApiKey
