@@ -1,12 +1,9 @@
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
-// Removed: const { exec } = require('child_process'); // yt-dlp related
 const manifest = require('./manifest.json');
 
 const app = express();
-
-// Removed: getYtdlpDirectUrl function // yt-dlp related
 
 // --- Helper function for fetching TMDb and YouTube data ---
 async function getStreamsForContent(type, id, config) {
@@ -87,10 +84,10 @@ async function getStreamsForContent(type, id, config) {
 
         if (youtubeResponse.data.items && youtubeResponse.data.items.length > 0) {
             for (const item of youtubeResponse.data.items) {
-                // Removed yt-dlp related direct URL extraction
+                // No yt-dlp related direct URL extraction or 'url' property here
                 streams.push({
                     title: `▶️ ${item.snippet.title} (Open on YouTube)`, 
-                    externalUrl: `googleusercontent.com/youtube.com/114{item.id.videoId}`, 
+                    externalUrl: `googleusercontent.com/youtube.com/116{item.id.videoId}`, 
                     ytId: item.id.videoId, 
                     thumbnail: item.snippet.thumbnails.high.url,
                     behaviorHints: {
@@ -103,7 +100,7 @@ async function getStreamsForContent(type, id, config) {
             console.log('[Addon Log] No YouTube results found.');
         }
 
-        // --- NEW: Add Google Search Stream Result ---
+        // --- Add Google Search Stream Result ---
         const googleSearchBaseUrl = "https://www.google.com/search?";
         let googleQuery = `${queryTitle} ${queryYear || ''}`;
         if (type === 'movie') {
@@ -118,13 +115,13 @@ async function getStreamsForContent(type, id, config) {
 
         streams.unshift({ // unshift to add it at the beginning of the list
             title: `🔎 Google Search: "${googleQuery}" (Long Videos)`,
-            url: googleSearchLink, // Using 'url' to directly open in browser
+            externalUrl: googleSearchLink, // CORRECTED: Using externalUrl for browser links
             behaviorHints: {
                 externalUrl: true // Hint to open externally, e.g., in Chrome
             }
         });
         console.log('[Addon Log] Added Google Search stream result.');
-        // --- END NEW ---
+        // --- END Google Search ---
 
         return { streams };
 
