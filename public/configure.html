@@ -90,12 +90,20 @@
 
         <div class="info">
             <p>This add-on provides a Google Search link for movies and series, specifically filtered for "long videos" and "video" results, allowing you to easily open them in your browser or YouTube app.</p>
-            <p>To use this add-on, you need a **TMDb API Key**.</p>
-            <p>Get your TMDb API Key <a href="https://www.themoviedb.org/documentation/api" target="_blank">here</a>. (You'll need to create an account first).</p>
+            <p>To use this add-on, you need API keys from **TMDb** and **OMDb**.</p>
+            <p>
+                Get your TMDb API Key <a href="https://www.themoviedb.org/documentation/api" target="_blank">here</a>.
+                <br>
+                Get your OMDb API Key <a href="http://www.omdbapi.com/apikey.aspx" target="_blank">here</a>.
+                (You'll need to create accounts for both if you don't have them).
+            </p>
         </div>
 
         <label for="tmdbApiKey">TMDb API Key:</label>
         <input type="text" id="tmdbApiKey" placeholder="Enter your TMDb API Key">
+
+        <label for="omdbApiKey">OMDb API Key:</label>
+        <input type="text" id="omdbApiKey" placeholder="Enter your OMDb API Key">
 
         <button onclick="generateUrl()">Generate Install URL</button>
 
@@ -105,16 +113,21 @@
     <script>
         function generateUrl() {
             const tmdbApiKey = document.getElementById('tmdbApiKey').value;
+            const omdbApiKey = document.getElementById('omdbApiKey').value;
 
             if (!tmdbApiKey) {
                 alert('Please enter your TMDb API Key.');
+                return;
+            }
+            if (!omdbApiKey) {
+                alert('Please enter your OMDb API Key.');
                 return;
             }
 
             // Get the base URL of the current page (your Hugging Face Space URL)
             const baseUrl = window.location.origin;
 
-            const manifestUrl = `${baseUrl}/manifest.json?tmdbApiKey=${tmdbApiKey}`;
+            const manifestUrl = `${baseUrl}/manifest.json?tmdbApiKey=${tmdbApiKey}&omdbApiKey=${omdbApiKey}`;
             const installLink = `stremio://` + manifestUrl;
 
             const installUrlDiv = document.getElementById('installUrl');
@@ -131,8 +144,12 @@
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             const tmdbApi = urlParams.get('tmdbApiKey');
+            const omdbApi = urlParams.get('omdbApiKey');
             if (tmdbApi) {
                 document.getElementById('tmdbApiKey').value = tmdbApi;
+            }
+            if (omdbApi) {
+                document.getElementById('omdbApiKey').value = omdbApi;
             }
         };
     </script>
