@@ -1,9 +1,41 @@
 const express = require('express');
-const axios = require('axios'); // For making HTTP requests to TMDb and YouTube
+const axios = require('axios');
 const path = require('path');
-const manifest = require('./manifest.json'); // Still need manifest for its base data
+const { exec } = require('child_process'); // NEW: Import exec for running shell commands
+const manifest = require('./manifest.json');
 
 const app = express();
+
+// --- NEW: Helper function to get direct YouTube URL using yt-dlp ---
+function getYtdlpDirectUrl(youtubeVideoId) {
+    return new Promise((resolve, reject) => {
+        // -f best: select the best quality format
+        // --get-url: just print the URL to stdout
+        const command = `yt-dlp -f best --get-url https://www.youtube.com/watch?v=${youtubeVideoId}`;
+        console.log(`[Addon Log] Executing yt-dlp command: ${command}`);
+
+        exec(command, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`[Addon Log] yt-dlp error for ${youtubeVideoId}: ${error.message}`);
+                // console.error(`[Addon Log] yt-dlp stderr: ${stderr}`); // Uncomment for detailed error debugging
+                reject(new Error(`Failed to get direct URL: ${error.message}`));
+                return;
+            }
+            if (stderr) {
+                console.warn(`[Addon Log] yt-dlp stderr for ${youtubeVideoId}: ${stderr}`);
+            }
+            const directUrl = stdout.trim();
+            if (directUrl) {
+                console.log(`[Addon Log] yt-dlp successful for ${youtubeVideoId}. Direct URL obtained.`);
+                resolve(directUrl);
+            } else {
+                console.warn(`[Addon Log] yt-dlp returned no URL for ${youtubeVideoId}.`);
+                reject(new Error('yt-dlp returned no direct URL.'));
+            }
+        });
+    });
+}
+// --- END NEW HELPER FUNCTION ---
 
 // --- Helper function for fetching TMDb and YouTube data ---
 async function getStreamsForContent(type, id, config) {
@@ -22,9 +54,20 @@ async function getStreamsForContent(type, id, config) {
         return { streams: [], error: 'API keys are required.' };
     }
 
-    const IMDB_ID = id; // Stremio uses IMDb IDs (ttXXXXXXX)
+    let IMDB_ID = id; // Default for movies
+
     let queryTitle = '';
     let queryYear = '';
+    // --- NEW: Series ID Parsing ---
+    let seasonNum, episodeNum;
+    if (type === 'series') {
+        const parts = id.split(':');
+        IMDB_ID = parts[0]; // tt7587890
+        seasonNum = parts[1]; // 2
+        episodeNum = parts[2]; // 1
+        console.log(`[Addon Log] Parsed Series ID: ${IMDB_ID}, S:${seasonNum}, E:${episodeNum}`);
+    }
+    // --- END NEW: Series ID Parsing ---
 
     try {
         // Step 1: Get TMDb ID from IMDb ID
@@ -42,6 +85,29 @@ async function getStreamsForContent(type, id, config) {
             queryTitle = tmdbFindResponse.data.tv_results[0].name;
             queryYear = (new Date(tmdbFindResponse.data.tv_results[0].first_air_date)).getFullYear();
             console.log(`[Addon Log] Found series TMDb ID: ${tmdbId}, Title: ${queryTitle}, Year: ${queryYear}`);
+
+            // --- NEW: Enhance search query for series ---
+            if (seasonNum && episodeNum) {
+                // If we want specific episode title, uncomment the following block
+                /*
+                try {
+                    const episodeDetailUrl = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNum}/episode/${episodeNum}?api_key=${tmdbApiKey}`;
+                    const episodeDetailResponse = await axios.get(episodeDetailUrl);
+                    if (episodeDetailResponse.data.name) {
+                        queryTitle = `${queryTitle} S${seasonNum} E${episodeNum} ${episodeDetailResponse.data.name}`;
+                    } else {
+                        queryTitle = `${queryTitle} Season ${seasonNum} Episode ${episodeNum}`;
+                    }
+                } catch (episodeError) {
+                    console.warn(`[Addon Log] Could not fetch episode details for S${seasonNum} E${episodeNum}: ${episodeError.message}`);
+                    queryTitle = `${queryTitle} Season ${seasonNum} Episode ${episodeNum}`;
+                }
+                */
+                // For now, simpler: append S/E directly
+                queryTitle = `${queryTitle} S${seasonNum} E${episodeNum}`;
+            }
+            // --- END NEW: Enhance search query for series ---
+
         } else {
             console.log(`[Addon Log] No TMDb results found for IMDb ID: ${IMDB_ID}`);
             return { streams: [] };
@@ -53,7 +119,13 @@ async function getStreamsForContent(type, id, config) {
         }
 
         // Step 2: Search YouTube with title and year
-        const youtubeSearchQuery = `${queryTitle} ${queryYear || ''}`;
+        let youtubeSearchQuery = `${queryTitle} ${queryYear || ''}`;
+        // --- NEW: Add "full movie" for movie searches ---
+        if (type === 'movie') {
+            youtubeSearchQuery += ' full movie';
+        }
+        // --- END NEW ---
+
         const youtubeUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(youtubeSearchQuery)}&key=${youtubeApiKey}&type=video&maxResults=${maxStreams}&videoDuration=${videoDuration}&order=${videoSort}`;
         
         console.log(`[Addon Log] Searching YouTube for: "${youtubeSearchQuery}" with maxResults=${maxStreams}, videoDuration=${videoDuration}, order=${videoSort}`);
@@ -64,19 +136,31 @@ async function getStreamsForContent(type, id, config) {
             return { streams: [] };
         }
 
-        const streams = youtubeResponse.data.items.map(item => ({
-            // Improved title for clarity
-            title: `▶️ ${item.snippet.title} (Open on YouTube)`, 
-            // Optional: Add more descriptive info
-            // description: `Uploaded by: ${item.snippet.channelTitle}\nPublished: ${new Date(item.snippet.publishedAt).toLocaleDateString()}`,
-            externalUrl: `https://www.youtube.com/watch?v=${item.id.videoId}`, 
-            ytId: item.id.videoId, 
-            thumbnail: item.snippet.thumbnails.high.url,
-            // Explicitly hint to Stremio to open externally
-            behaviorHints: {
-                externalUrl: true 
+        const streams = [];
+        for (const item of youtubeResponse.data.items) {
+            // --- NEW: Try to get direct URL using yt-dlp ---
+            let directUrl = null;
+            try {
+                directUrl = await getYtdlpDirectUrl(item.id.videoId);
+            } catch (ytDlpError) {
+                console.warn(`[Addon Log] Failed to get yt-dlp direct URL for ${item.id.videoId}: ${ytDlpError.message}`);
+                // If yt-dlp fails, we still add the stream but without a direct 'url'
+                // Stremio will then fallback to externalUrl as its primary option.
             }
-        }));
+            // --- END NEW ---
+
+            streams.push({
+                title: `▶️ ${item.snippet.title} (Open on YouTube)`, 
+                // Add the direct URL if successfully obtained
+                url: directUrl, 
+                externalUrl: `https://www.youtube.com/watch?v=${item.id.videoId}`, 
+                ytId: item.id.videoId, 
+                thumbnail: item.snippet.thumbnails.high.url,
+                behaviorHints: {
+                    externalUrl: true // Still hint for external playback
+                }
+            });
+        }
 
         console.log(`[Addon Log] Found ${streams.length} YouTube streams.`);
         return { streams };
@@ -117,8 +201,10 @@ app.get('/manifest.json', (req, res) => {
   // Attach configuration to the manifest (this is how Stremio sends it to streams)
   const configuredManifest = { ...manifest };
   // Create unique ID for Stremio caching based on config
-  configuredManifest.id = configuredManifest.id + `_${youtubeApiKey.substring(0,5)}_${tmdbApiKey.substring(0,5)}_${maxStreams}_${videoDuration}_${videoSort}`; 
-  configuredManifest.name = configuredManifest.name + ` (Configured)`;
+  configuredManifest.id = configuredManifest.id + `_${youtubeApiKey.substring(0,5)}_${tmdbApiKey.substring(0,5)}_${maxStreams}_${videoDuration}_(YT)`; 
+  // --- UPDATED: Add-on Name ---
+  configuredManifest.name = `Tube Search (YT)`; // Set name directly
+  // --- END UPDATED ---
   configuredManifest.config = {
     youtubeApiKey,
     tmdbApiKey,
