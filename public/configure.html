@@ -1,275 +1,140 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Stream Provider Configuration</title>
+    <title>Tube Search Add-on Configuration</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #1a1a1a;
-            color: #f0f0f0;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 20px;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
         }
         .container {
-            background-color: #2a2a2a;
+            background-color: #fff;
             padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-            max-width: 650px; /* Slightly wider */
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             width: 100%;
-            text-align: center;
+            max-width: 500px;
+            box-sizing: border-box;
         }
         h1 {
-            color: #4CAF50;
-            margin-bottom: 20px;
-            font-size: 1.8em;
-        }
-        p {
-            margin-bottom: 15px;
-            line-height: 1.5;
-            font-size: 0.95em;
-        }
-        .input-group {
-            margin-bottom: 15px;
-            text-align: left;
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 25px;
         }
         label {
             display: block;
             margin-bottom: 8px;
             font-weight: bold;
         }
-        input[type="text"], input[type="number"], select {
+        input[type="text"] {
             width: calc(100% - 20px);
             padding: 10px;
-            border: 1px solid #444;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
             border-radius: 4px;
-            background-color: #333;
-            color: #f0f0f0;
-            font-size: 1em;
-        }
-        select {
-            appearance: none; /* Remove default arrow in some browsers */
-            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20255%20255%22%3E%3Cpolygon%20points%3D%220%2C0%20127.5%2C127.5%20255%2C0%22%20fill%3D%22%23f0f0f0%22%2F%3E%3C%2Fsvg%3E'); /* Custom arrow */
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            background-size: 12px;
+            font-size: 16px;
         }
         button {
-            background-color: #4CAF50;
+            background-color: #007bff;
             color: white;
-            padding: 12px 25px;
+            padding: 12px 20px;
             border: none;
-            border-radius: 5px;
+            border-radius: 4px;
             cursor: pointer;
-            font-size: 1.1em;
+            font-size: 16px;
+            width: 100%;
             transition: background-color 0.3s ease;
-            margin-top: 10px;
         }
         button:hover {
-            background-color: #45a049;
-        }
-        .instructions {
-            text-align: left;
-            margin-top: 25px;
-            padding-top: 20px;
-            border-top: 1px solid #333;
-            font-size: 0.85em;
-            color: #aaa;
-        }
-        .instructions a {
-            color: #66b2ff;
-            text-decoration: none;
-        }
-        .instructions a:hover {
-            text-decoration: underline;
-        }
-        #installLinkContainer {
-            margin-top: 30px;
-            padding: 15px;
-            background-color: #333;
-            border-radius: 8px;
-            text-align: left;
-            display: none; /* Hidden by default */
-        }
-        #installLink {
-            word-break: break-all;
-            background-color: #444;
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 0.9em;
-            cursor: text;
-        }
-        .copy-button {
-            background-color: #007bff;
-            margin-left: 10px;
-            padding: 8px 15px;
-            font-size: 0.9em;
-            flex-shrink: 0; /* Prevent button from shrinking */
-        }
-        .copy-button:hover {
             background-color: #0056b3;
         }
-        .message {
-            margin-top: 15px;
-            color: #66b2ff;
+        .info {
+            background-color: #e9f7ef;
+            border-left: 5px solid #28a745;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
             font-size: 0.9em;
+        }
+        .info a {
+            color: #28a745;
+            text-decoration: none;
+        }
+        .info a:hover {
+            text-decoration: underline;
+        }
+        #installUrl {
+            margin-top: 20px;
+            word-break: break-all;
+            background-color: #f8f9fa;
+            border: 1px dashed #ced4da;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            text-align: center;
+            display: none; /* Hidden by default */
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>YouTube Stream Provider Configuration</h1>
-        <p>This add-on provides YouTube streams for movies and shows. It requires API keys and allows you to customize stream results.</p>
+        <h1>Tube Search Add-on Configuration</h1>
 
-        <div class="input-group">
-            <label for="youtubeApiKey">Your YouTube Data API Key:</label>
-            <input type="text" id="youtubeApiKey" placeholder="Enter your YouTube API key..." required>
+        <div class="info">
+            <p>This add-on provides a Google Search link for movies and series, specifically filtered for "long videos" and "video" results, allowing you to easily open them in your browser or YouTube app.</p>
+            <p>To use this add-on, you need a **TMDb API Key**.</p>
+            <p>Get your TMDb API Key <a href="https://www.themoviedb.org/documentation/api" target="_blank">here</a>. (You'll need to create an account first).</p>
         </div>
 
-        <div class="input-group">
-            <label for="tmdbApiKey">Your TMDb API Key (v3):</label>
-            <input type="text" id="tmdbApiKey" placeholder="Enter your TMDb API key..." required>
-        </div>
+        <label for="tmdbApiKey">TMDb API Key:</label>
+        <input type="text" id="tmdbApiKey" placeholder="Enter your TMDb API Key">
 
-        <div class="input-group">
-            <label for="maxStreams">Max Number of Streams to show:</label>
-            <input type="number" id="maxStreams" value="5" min="1" max="20">
-        </div>
+        <button onclick="generateUrl()">Generate Install URL</button>
 
-        <div class="input-group">
-            <label for="videoDuration">Video Duration Filter:</label>
-            <select id="videoDuration">
-                <option value="any">Any Duration</option>
-                <option value="short">Short (&lt; 4 min)</option>
-                <option value="medium">Medium (4 - 20 min)</option>
-                <option value="long">Long (&gt; 20 min)</option>
-            </select>
-        </div>
-
-        <div class="input-group">
-            <label for="videoSort">Video Sorting Order:</label>
-            <select id="videoSort">
-                <option value="relevance">Relevance</option>
-                <option value="date">Date Uploaded (Newest)</option>
-                <option value="viewCount">Most Views</option>
-            </select>
-        </div>
-
-        <button onclick="generateLink()">Generate Install Link</button>
-        <div id="installLinkContainer">
-            <label>Copy this link to install in Stremio:</label>
-            <div style="display: flex; align-items: center;">
-                <span id="installLink"></span>
-                <button class="copy-button" onclick="copyLink()">Copy</button>
-            </div>
-            <p class="message" id="copyMessage"></p>
-        </div>
-
-        <div class="instructions">
-            <h3>How to get your API Keys:</h3>
-            <h4>YouTube Data API Key:</h4>
-            <ol>
-                <li>Go to the <a href="https://console.developers.google.com/apis/dashboard" target="_blank">Google Cloud Console API Dashboard</a>.</li>
-                <li>Log in, create/select project.</li>
-                <li>In "APIs & Services" -> "Library", search for "YouTube Data API v3" and enable it.</li>
-                <li>Go to "Credentials", click "CREATE CREDENTIALS" and choose "API Key". Copy it.</li>
-            </ol>
-            <h4>TMDb API Key (v3):</h4>
-            <ol>
-                <li>Go to <a href="https://www.themoviedb.org/login" target="_blank">The Movie Database (TMDb)</a> and create an account.</li>
-                <li>Log in, then go to your <a href="https://www.themoviedb.org/settings/api" target="_blank">API Settings page</a>.</li>
-                <li>Request a new API Key (v3 Developer).</li>
-                <li>Agree to terms and fill in the application details. Copy your generated API Key.</li>
-            </ol>
-            <p><strong>Important:</strong> Restrict your API keys in their respective consoles for security.</p>
-        </div>
+        <div id="installUrl"></div>
     </div>
 
     <script>
-        function generateLink() {
-            const youtubeApiKey = document.getElementById('youtubeApiKey').value.trim();
-            const tmdbApiKey = document.getElementById('tmdbApiKey').value.trim();
-            const maxStreams = document.getElementById('maxStreams').value;
-            const videoDuration = document.getElementById('videoDuration').value;
-            const videoSort = document.getElementById('videoSort').value;
-            
-            const copyMessage = document.getElementById('copyMessage');
-            copyMessage.textContent = ''; // Clear previous messages
+        function generateUrl() {
+            const tmdbApiKey = document.getElementById('tmdbApiKey').value;
 
-            if (!youtubeApiKey || !tmdbApiKey) {
-                copyMessage.textContent = 'Both YouTube and TMDb API keys are required.';
-                copyMessage.style.color = '#ff6666';
+            if (!tmdbApiKey) {
+                alert('Please enter your TMDb API Key.');
                 return;
             }
 
-            // Basic validation
-            if (youtubeApiKey.length < 30 || tmdbApiKey.length < 30) {
-                copyMessage.textContent = 'One or both API keys seem too short. Please double-check them.';
-                copyMessage.style.color = '#ff6666';
-                return;
-            }
-
-            // Get the base URL of the current page (e.g., https://hfuser-tubesearch.hf.space)
+            // Get the base URL of the current page (your Hugging Face Space URL)
             const baseUrl = window.location.origin;
-            
-            // Construct the manifest URL with all parameters
-            const params = new URLSearchParams();
-            params.append('youtubeApiKey', youtubeApiKey);
-            params.append('tmdbApiKey', tmdbApiKey);
-            params.append('maxStreams', maxStreams);
-            params.append('videoDuration', videoDuration);
-            params.append('videoSort', videoSort);
 
-            const manifestUrl = `${baseUrl}/manifest.json?${params.toString()}`;
+            const manifestUrl = `${baseUrl}/manifest.json?tmdbApiKey=${tmdbApiKey}`;
+            const installLink = `stremio://` + manifestUrl;
 
-            document.getElementById('installLink').textContent = manifestUrl;
-            document.getElementById('installLinkContainer').style.display = 'block';
-            
-            copyLink(); // Optionally, copy to clipboard immediately
+            const installUrlDiv = document.getElementById('installUrl');
+            installUrlDiv.innerHTML = `
+                <p>Copy and paste this URL into Stremio's Add-ons section, or click the link if you have Stremio installed:</p>
+                <p><a href="${installLink}">${installLink}</a></p>
+                <p>Or manually add the manifest URL:</p>
+                <p><code>${manifestUrl}</code></p>
+            `;
+            installUrlDiv.style.display = 'block'; // Show the generated URL
         }
 
-        function copyLink() {
-            const installLink = document.getElementById('installLink');
-            const copyMessage = document.getElementById('copyMessage');
-            
-            if (!installLink.textContent) {
-                copyMessage.textContent = 'No link to copy yet. Please generate it first.';
-                copyMessage.style.color = '#ff6666';
-                return;
+        // Pre-fill fields from URL parameters if available (useful for re-configuring)
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const tmdbApi = urlParams.get('tmdbApiKey');
+            if (tmdbApi) {
+                document.getElementById('tmdbApiKey').value = tmdbApi;
             }
-
-            navigator.clipboard.writeText(installLink.textContent)
-                .then(() => {
-                    copyMessage.textContent = 'Link copied to clipboard!';
-                    copyMessage.style.color = '#4CAF50';
-                })
-                .catch(err => {
-                    const textArea = document.createElement("textarea");
-                    textArea.value = installLink.textContent;
-                    textArea.style.position = "fixed";
-                    textArea.style.left = "-9999px";
-                    document.body.appendChild(textArea);
-                    textArea.focus();
-                    textArea.select();
-                    try {
-                        document.execCommand('copy');
-                        copyMessage.textContent = 'Link copied to clipboard (fallback)!';
-                        copyMessage.style.color = '#4CAF50';
-                    } catch (err) {
-                        copyMessage.textContent = 'Failed to copy link. Please copy manually.';
-                        copyMessage.style.color = '#ff6666';
-                    } finally {
-                        document.body.removeChild(textArea);
-                    }
-                });
-        }
+        };
     </script>
 </body>
 </html>
