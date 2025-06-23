@@ -24,41 +24,56 @@ async function getStreamsForContent(type, id, config) {
     }
 
     let IMDB_ID = null;
-    let TMDB_ID = null;
+    let TMDB_ID = null; // This will hold the numeric TMDb ID
     let queryTitle = '';
     let queryYear = '';
 
     // Series specific parsing (season/episode numbers)
+    let rawContentId = id; // Store the original ID passed to the function
+
     let seasonNum, episodeNum;
     if (type === 'series') {
         const parts = id.split(':');
-        IMDB_ID = parts[0].startsWith('tt') ? parts[0] : null;
-        TMDB_ID = (parts[0] && !IMDB_ID) ? parts[0] : null;
+        rawContentId = parts[0]; // ttXXXXXXX or tmdb:XXXXXXX or XXXXXXX
+        IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null;
+        TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null); // Extracts numeric TMDb ID if applicable
+        
         seasonNum = parts[1];
         episodeNum = parts[2];
-        console.log(`[Addon Log] Parsed Series ID: IMDB=${IMDB_ID}, TMDB=${TMDB_ID}, S:${seasonNum}, E:${episodeNum}`);
+        console.log(`[Addon Log] Parsed Series ID: Original=${id}, IMDB=${IMDB_ID}, TMDB=${TMDB_ID}, S:${seasonNum}, E:${episodeNum}`);
     } else if (type === 'movie') {
-        IMDB_ID = id.startsWith('tt') ? id : null;
-        TMDB_ID = (id && !IMDB_ID) ? id.split(':')[0] : null; // Handle tmdb:id format, get only the ID part
-        console.log(`[Addon Log] Parsed Movie ID: IMDB=${IMDB_ID}, TMDB=${TMDB_ID}`);
+        rawContentId = id; // ttXXXXXXX or tmdb:XXXXXXX or XXXXXXX
+        IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null;
+        TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null); // Extracts numeric TMDb ID if applicable
+        
+        console.log(`[Addon Log] Parsed Movie ID: Original=${id}, IMDB=${IMDB_ID}, TMDB=${TMDB_ID}`);
     }
+    
+    // Ensure TMDB_ID is null if it's still 'tmdb' or not a number when it should be.
+    // This handles cases where ID is just a number directly or starts with tmdb:
+    if (TMDB_ID && isNaN(TMDB_ID) && TMDB_ID.includes(':')) {
+        TMDB_ID = TMDB_ID.split(':')[1];
+    } else if (TMDB_ID && isNaN(TMDB_ID) && !TMDB_ID.startsWith('tt')) { // If it's not a tt ID and still not a number (e.g., 'tmdb'), set to null
+        TMDB_ID = null;
+    }
+
 
     try {
         // --- Step 1: Get TMDb details based on provided ID ---
         if (IMDB_ID) {
-            // Option 1: Try TMDb /find endpoint with IMDb ID
+            // Option 1: Try TMDb /find endpoint with IMDb ID (often good for cross-referencing)
             try {
                 const tmdbFindUrl = `https://api.themoviedb.org/3/find/${IMDB_ID}?api_key=${tmdbApiKey}&external_source=imdb_id`;
                 console.log(`[Addon Log] Trying TMDb find with IMDb ID: ${IMDB_ID}`);
                 const tmdbFindResponse = await axios.get(tmdbFindUrl);
 
                 if (type === 'movie' && tmdbFindResponse.data.movie_results.length > 0) {
-                    TMDB_ID = tmdbFindResponse.data.movie_results[0].id;
+                    TMDB_ID = tmdbFindResponse.data.movie_results[0].id; // Update TMDB_ID from find results
                     queryTitle = tmdbFindResponse.data.movie_results[0].title;
                     queryYear = (new Date(tmdbFindResponse.data.movie_results[0].release_date)).getFullYear();
                     console.log(`[Addon Log] Found movie via TMDb Find: ${queryTitle}`);
                 } else if (type === 'series' && tmdbFindResponse.data.tv_results.length > 0) {
-                    TMDB_ID = tmdbFindResponse.data.tv_results[0].id;
+                    TMDB_ID = tmdbFindResponse.data.tv_results[0].id; // Update TMDB_ID from find results
                     queryTitle = tmdbFindResponse.data.tv_results[0].name;
                     queryYear = (new Date(tmdbFindResponse.data.tv_results[0].first_air_date)).getFullYear();
                     console.log(`[Addon Log] Found series via TMDb Find: ${queryTitle}`);
@@ -95,15 +110,14 @@ async function getStreamsForContent(type, id, config) {
         } 
         
         // If we still don't have a title, but we have a TMDB_ID (e.g., from a TMDB catalog addon)
-        const actualTmdbId = TMDB_ID && TMDB_ID.includes(':') ? TMDB_ID.split(':')[1] : TMDB_ID;
-
-        if (actualTmdbId && !queryTitle) {
+        // This TMDB_ID would be the numeric one parsed earlier.
+        if (TMDB_ID && !queryTitle) {
             const directTmdbUrl = (type === 'movie') ?
-                `https://api.themoviedb.org/3/movie/${actualTmdbId}?api_key=${tmdbApiKey}` :
-                `https://api.themoviedb.org/3/tv/${actualTmdbId}?api_key=${tmdbApiKey}`;
+                `https://api.themoviedb.org/3/movie/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids` :
+                `https://api.themoviedb.org/3/tv/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids`;
             
             try {
-                console.log(`[Addon Log] Trying direct TMDb lookup with TMDB ID: ${actualTmdbId}`);
+                console.log(`[Addon Log] Trying direct TMDb lookup with TMDB ID: ${TMDB_ID}`);
                 const directTmdbResponse = await axios.get(directTmdbUrl);
                 if (type === 'movie') {
                     queryTitle = directTmdbResponse.data.title;
@@ -124,7 +138,7 @@ async function getStreamsForContent(type, id, config) {
                 }
                 console.log(`[Addon Log] Found ${type} via direct TMDb ID lookup: ${queryTitle}`);
             } catch (tmdbIdError) {
-                console.warn(`[Addon Log] Direct TMDb lookup failed for TMDB ID ${actualTmdbId}: ${tmdbIdError.message}`);
+                console.warn(`[Addon Log] Direct TMDb lookup failed for TMDB ID ${TMDB_ID}: ${tmdbIdError.message}`);
             }
         }
 
@@ -136,7 +150,7 @@ async function getStreamsForContent(type, id, config) {
                 const omdbResponse = await axios.get(omdbUrl);
                 if (omdbResponse.data.Response === 'True') {
                     queryTitle = omdbResponse.data.Title;
-                    queryYear = omdbResponse.data.Year ? parseInt(omdbResponse.data.Year.substring(0,4)) : ''; // OMDb Year can be "2001" or "2001-"
+                    queryYear = omdbResponse.data.Year ? parseInt(omdbResponse.data.Year.substring(0,4)) : ''; 
                     console.log(`[Addon Log] Found content via OMDb: ${queryTitle}`);
                 } else {
                     console.warn(`[Addon Log] OMDb did not return results for IMDb ID ${IMDB_ID}: ${omdbResponse.data.Error}`);
