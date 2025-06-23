@@ -84,10 +84,9 @@ async function getStreamsForContent(type, id, config) {
 
         if (youtubeResponse.data.items && youtubeResponse.data.items.length > 0) {
             for (const item of youtubeResponse.data.items) {
-                // No yt-dlp related direct URL extraction or 'url' property here
                 streams.push({
                     title: `▶️ ${item.snippet.title} (Open on YouTube)`, 
-                    externalUrl: `googleusercontent.com/youtube.com/116{item.id.videoId}`, 
+                    externalUrl: `https://www.youtube.com/watch?v=${item.id.videoId}`, // Changed to direct youtube.com link
                     ytId: item.id.videoId, 
                     thumbnail: item.snippet.thumbnails.high.url,
                     behaviorHints: {
@@ -110,14 +109,14 @@ async function getStreamsForContent(type, id, config) {
             googleQuery = youtubeSearchQuery; 
         }
 
-        // Encode the query and add the long video duration filter
-        const googleSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(googleQuery)}&tbs=dur:l`;
+        // Encode the query and add the long video duration filter and video tab filter
+        const googleSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(googleQuery)}&tbs=dur:l&tbm=vid`;
 
         streams.unshift({ // unshift to add it at the beginning of the list
             title: `🔎 Google Search: "${googleQuery}" (Long Videos)`,
-            externalUrl: googleSearchLink, // CORRECTED: Using externalUrl for browser links
+            externalUrl: googleSearchLink, 
             behaviorHints: {
-                externalUrl: true // Hint to open externally, e.g., in Chrome
+                externalUrl: true 
             }
         });
         console.log('[Addon Log] Added Google Search stream result.');
