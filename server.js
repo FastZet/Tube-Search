@@ -5,17 +5,22 @@ const manifest = require('./manifest.json');
 
 const app = express();
 
-// --- Helper function for fetching TMDb data and Google Search ---
+// --- Helper function for fetching TMDb/OMDb data and Google Search ---
 async function getStreamsForContent(type, id, config) {
-    const { tmdbApiKey } = config;
+    const { tmdbApiKey, omdbApiKey } = config;
 
     console.log('[Addon Log] Stream handler invoked with config:', {
-        tmdbApiKey: tmdbApiKey ? 'Provided' : 'Missing'
+        tmdbApiKey: tmdbApiKey ? 'Provided' : 'Missing',
+        omdbApiKey: omdbApiKey ? 'Provided' : 'Missing'
     });
 
     if (!tmdbApiKey) {
         console.error('[Addon Log] Missing TMDb API key.');
         return { streams: [], error: 'TMDb API key is required.' };
+    }
+    if (!omdbApiKey) {
+        console.warn('[Addon Log] Missing OMDb API key. OMDb fallback will not be used.');
+        // Don't return error here, proceed with TMDb only
     }
 
     let IMDB_ID = null;
@@ -28,20 +33,20 @@ async function getStreamsForContent(type, id, config) {
     if (type === 'series') {
         const parts = id.split(':');
         IMDB_ID = parts[0].startsWith('tt') ? parts[0] : null;
-        TMDB_ID = (parts[0] && !IMDB_ID) ? parts[0] : null; // If no tt, assume it's a TMDB ID
+        TMDB_ID = (parts[0] && !IMDB_ID) ? parts[0] : null;
         seasonNum = parts[1];
         episodeNum = parts[2];
         console.log(`[Addon Log] Parsed Series ID: IMDB=${IMDB_ID}, TMDB=${TMDB_ID}, S:${seasonNum}, E:${episodeNum}`);
     } else if (type === 'movie') {
         IMDB_ID = id.startsWith('tt') ? id : null;
-        TMDB_ID = (id && !IMDB_ID) ? id : id.split(':')[0]; // If no tt, assume it's a TMDB ID. Handle tmdb:id format
+        TMDB_ID = (id && !IMDB_ID) ? id.split(':')[0] : null; // Handle tmdb:id format, get only the ID part
         console.log(`[Addon Log] Parsed Movie ID: IMDB=${IMDB_ID}, TMDB=${TMDB_ID}`);
     }
 
     try {
         // --- Step 1: Get TMDb details based on provided ID ---
         if (IMDB_ID) {
-            // Option 1: Try TMDb /find endpoint with IMDb ID (often good for cross-referencing)
+            // Option 1: Try TMDb /find endpoint with IMDb ID
             try {
                 const tmdbFindUrl = `https://api.themoviedb.org/3/find/${IMDB_ID}?api_key=${tmdbApiKey}&external_source=imdb_id`;
                 console.log(`[Addon Log] Trying TMDb find with IMDb ID: ${IMDB_ID}`);
@@ -84,13 +89,12 @@ async function getStreamsForContent(type, id, config) {
                     }
                     console.log(`[Addon Log] Found ${type} via direct TMDb lookup: ${queryTitle}`);
                 } catch (directError) {
-                    console.error(`[Addon Log] Direct TMDb lookup failed for IMDb ID ${IMDB_ID}: ${directError.message}`);
+                    console.warn(`[Addon Log] Direct TMDb lookup failed for IMDb ID ${IMDB_ID}: ${directError.message}`);
                 }
             }
         } 
         
         // If we still don't have a title, but we have a TMDB_ID (e.g., from a TMDB catalog addon)
-        // Ensure TMDB_ID is a number, as it can come as "tmdb:ID" from Stremio
         const actualTmdbId = TMDB_ID && TMDB_ID.includes(':') ? TMDB_ID.split(':')[1] : TMDB_ID;
 
         if (actualTmdbId && !queryTitle) {
@@ -104,23 +108,51 @@ async function getStreamsForContent(type, id, config) {
                 if (type === 'movie') {
                     queryTitle = directTmdbResponse.data.title;
                     queryYear = (new Date(directTmdbResponse.data.release_date)).getFullYear();
+                    // Also try to get IMDb ID from TMDb external_ids if not already available
+                    if (!IMDB_ID && directTmdbResponse.data.external_ids && directTmdbResponse.data.external_ids.imdb_id) {
+                        IMDB_ID = directTmdbResponse.data.external_ids.imdb_id;
+                        console.log(`[Addon Log] Retrieved IMDb ID from TMDb external_ids: ${IMDB_ID}`);
+                    }
                 } else { // series
                     queryTitle = directTmdbResponse.data.name;
                     queryYear = (new Date(directTmdbResponse.data.first_air_date)).getFullYear();
+                     // Also try to get IMDb ID from TMDb external_ids if not already available
+                    if (!IMDB_ID && directTmdbResponse.data.external_ids && directTmdbResponse.data.external_ids.imdb_id) {
+                        IMDB_ID = directTmdbResponse.data.external_ids.imdb_id;
+                        console.log(`[Addon Log] Retrieved IMDb ID from TMDb external_ids: ${IMDB_ID}`);
+                    }
                 }
                 console.log(`[Addon Log] Found ${type} via direct TMDb ID lookup: ${queryTitle}`);
             } catch (tmdbIdError) {
-                console.error(`[Addon Log] Direct TMDb lookup failed for TMDB ID ${actualTmdbId}: ${tmdbIdError.message}`);
+                console.warn(`[Addon Log] Direct TMDb lookup failed for TMDB ID ${actualTmdbId}: ${tmdbIdError.message}`);
+            }
+        }
+
+        // --- Fallback 2: OMDb API if TMDb failed and we have an IMDb ID ---
+        if (!queryTitle && IMDB_ID && omdbApiKey) {
+            const omdbUrl = `http://www.omdbapi.com/?apikey=${omdbApiKey}&i=${IMDB_ID}&plot=short&r=json`;
+            try {
+                console.log(`[Addon Log] TMDb lookup failed. Trying OMDb for IMDb ID: ${IMDB_ID}`);
+                const omdbResponse = await axios.get(omdbUrl);
+                if (omdbResponse.data.Response === 'True') {
+                    queryTitle = omdbResponse.data.Title;
+                    queryYear = omdbResponse.data.Year ? parseInt(omdbResponse.data.Year.substring(0,4)) : ''; // OMDb Year can be "2001" or "2001-"
+                    console.log(`[Addon Log] Found content via OMDb: ${queryTitle}`);
+                } else {
+                    console.warn(`[Addon Log] OMDb did not return results for IMDb ID ${IMDB_ID}: ${omdbResponse.data.Error}`);
+                }
+            } catch (omdbError) {
+                console.error(`[Addon Log] OMDb API error for IMDb ID ${IMDB_ID}: ${omdbError.message}`);
             }
         }
 
 
         if (!queryTitle) {
-            console.log('[Addon Log] Failed to retrieve title from TMDb using any method. Cannot generate search link.');
+            console.log('[Addon Log] Failed to retrieve title from TMDb or OMDb using any method. Cannot generate search link.');
             return { streams: [] };
         }
 
-        // --- Step 2: Enhance search query for series and movies ---
+        // --- Step 3: Generate Google Search Stream Result ---
         let googleSearchQuery = `${queryTitle} ${queryYear || ''}`;
         if (type === 'movie') {
             googleSearchQuery += ' full movie';
@@ -130,7 +162,6 @@ async function getStreamsForContent(type, id, config) {
         
         const streams = [];
 
-        // --- Add Google Search Stream Result (only stream result) ---
         const googleSearchBaseUrl = "https://www.google.com/search?";
         const googleSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(googleSearchQuery)}&tbs=dur:l&tbm=vid`;
 
@@ -142,7 +173,6 @@ async function getStreamsForContent(type, id, config) {
             }
         });
         console.log('[Addon Log] Added Google Search stream result.');
-        // --- END Google Search ---
 
         return { streams };
 
@@ -151,13 +181,13 @@ async function getStreamsForContent(type, id, config) {
         if (error.response) {
             console.error(`[Addon Log] API Error Status: ${error.response.status}, Data:`, error.response.data);
             if (error.response.status === 403) {
-                return { streams: [], error: 'TMDb API Key (403): Quota Exceeded or Permissions Issue.' };
+                return { streams: [], error: 'API Key (403): Quota Exceeded or Permissions Issue. Check TMDb/OMDb keys.' };
             }
             if (error.response.status === 401) {
-                return { streams: [], error: 'TMDb API Key (401): Unauthorized. Check your API key.' };
+                return { streams: [], error: 'API Key (401): Unauthorized. Check your TMDb/OMDb keys.' };
             }
             if (error.response.status === 404) {
-                return { streams: [], error: 'TMDb (404): Content not found.' };
+                return { streams: [], error: 'Content not found on TMDb/OMDb.' };
             }
         }
         return { streams: [], error: 'Failed to retrieve streams due to an internal error.' };
@@ -174,14 +204,16 @@ app.get('/manifest.json', (req, res) => {
 
   // Extract query parameters from the request to manifest.json
   const tmdbApiKey = req.query.tmdbApiKey || '';
+  const omdbApiKey = req.query.omdbApiKey || '';
 
   // Attach configuration to the manifest
   const configuredManifest = { ...manifest };
   // Update unique ID and name
-  configuredManifest.id = configuredManifest.id + `_${tmdbApiKey.substring(0,5)}_(TMDB)`; // Simplified ID suffix
-  configuredManifest.name = `Tube Search`; // Simplified add-on name
+  configuredManifest.id = configuredManifest.id + `_${tmdbApiKey.substring(0,5)}_${omdbApiKey.substring(0,5)}`; 
+  configuredManifest.name = `Tube Search`; 
   configuredManifest.config = {
-    tmdbApiKey
+    tmdbApiKey,
+    omdbApiKey
   };
   
   res.json(configuredManifest);
@@ -197,10 +229,11 @@ app.get('/stream/:type/:id.json', async (req, res) => {
 
   try {
     // Extract configuration from the request URL
-    const { tmdbApiKey } = req.query;
+    const { tmdbApiKey, omdbApiKey } = req.query;
 
     const config = {
-        tmdbApiKey
+        tmdbApiKey,
+        omdbApiKey
     };
     
     console.log(`[Server Log] Parsed stream arguments: ${JSON.stringify({ type, id })} with config: ${JSON.stringify(config)}`); 
@@ -245,6 +278,6 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 7860;
 app.listen(PORT, () => {
     console.log(`Tube Search add-on running on port ${PORT}`);
-    console.log(`Manifest URL (example): http://localhost:${PORT}/manifest.json?tmdbApiKey=YOUR_TMDB_KEY`);
+    console.log(`Manifest URL (example): http://localhost:${PORT}/manifest.json?tmdbApiKey=YOUR_TMDB_KEY&omdbApiKey=YOUR_OMDB_KEY`);
     console.log(`Configure URL: http://localhost:${PORT}/configure`);
 });
