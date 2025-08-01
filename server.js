@@ -183,6 +183,7 @@ async function getStreamsForContent(type, id, config) {
 
         // --- Fetch episode name for series ---
         let episodeTitle = '';
+        // First, try to get episode name from TMDb if we have the ID
         if (type === 'series' && TMDB_ID && seasonNum && episodeNum) {
             try {
                 const episodeUrl = `https://api.themoviedb.org/3/tv/${TMDB_ID}/season/${seasonNum}/episode/${episodeNum}?api_key=${tmdbApiKey}`;
@@ -190,10 +191,25 @@ async function getStreamsForContent(type, id, config) {
                 const episodeResponse = await axios.get(episodeUrl);
                 if (episodeResponse.data && episodeResponse.data.name) {
                     episodeTitle = episodeResponse.data.name;
-                    console.log(`[Addon Log] Found episode name: "${episodeTitle}"`);
+                    console.log(`[Addon Log] Found episode name via TMDb: "${episodeTitle}"`);
                 }
             } catch (e) {
                 console.warn(`[Addon Log] Could not fetch episode name. Search will proceed without it. Error: ${e.message}`);
+            }
+        }
+
+        // Fallback: If TMDb failed and we have an IMDb ID, try getting the episode name from OMDb
+        if (!episodeTitle && type === 'series' && IMDB_ID && seasonNum && episodeNum && omdbApiKey) {
+            try {
+                const omdbEpisodeUrl = `http://www.omdbapi.com/?apikey=${omdbApiKey}&i=${IMDB_ID}&Season=${seasonNum}&Episode=${episodeNum}`;
+                console.log(`[Addon Log] Could not get episode from TMDb, trying OMDb: ${omdbEpisodeUrl}`);
+                const omdbEpisodeResponse = await axios.get(omdbEpisodeUrl);
+                if (omdbEpisodeResponse.data && omdbEpisodeResponse.data.Response === 'True' && omdbEpisodeResponse.data.Title) {
+                    episodeTitle = omdbEpisodeResponse.data.Title;
+                    console.log(`[Addon Log] Found episode name via OMDb: "${episodeTitle}"`);
+                }
+            } catch (e) {
+                console.warn(`[Addon Log] OMDb episode lookup failed. Error: ${e.message}`);
             }
         }
 
