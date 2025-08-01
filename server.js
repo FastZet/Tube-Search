@@ -107,31 +107,7 @@ async function getStreamsForContent(type, id, config) {
             } catch (findError) {
                 console.warn(`[Addon Log] TMDb Find error for IMDb ID ${IMDB_ID}: ${findError.message}. Trying direct lookup.`);
             }
-
-            // Fallback for IMDb ID: Direct TMDb movie/tv endpoint if find failed or didn't provide enough.
-            if (!queryTitle) {
-                const directTmdbUrl = (type === 'movie') ?
-                    `https://api.themoviedb.org/3/movie/${IMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids` :
-                    `https://api.themoviedb.org/3/tv/${IMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids`;
-                
-                try {
-                    console.log(`[Addon Log] Trying direct TMDb lookup with IMDb ID: ${IMDB_ID}`);
-                    const directTmdbResponse = await axios.get(directTmdbUrl);
-                    if (type === 'movie') {
-                        TMDB_ID = directTmdbResponse.data.id;
-                        queryTitle = directTmdbResponse.data.title;
-                        queryYear = (new Date(directTmdbResponse.data.release_date)).getFullYear();
-                    } else { // series
-                        TMDB_ID = directTmdbResponse.data.id;
-                        queryTitle = directTmdbResponse.data.name;
-                        queryYear = (new Date(directTmdbResponse.data.first_air_date)).getFullYear();
-                    }
-                    console.log(`[Addon Log] Found ${type} via direct TMDb lookup: ${queryTitle}`);
-                } catch (directError) {
-                    console.warn(`[Addon Log] Direct TMDb lookup failed for IMDb ID ${IMDB_ID}: ${directError.message}`);
-                }
-            }
-        } 
+        }
         
         // If we still don't have a title, but we have a TMDB_ID (e.g., from a TMDB catalog addon)
         if (TMDB_ID && !queryTitle) {
@@ -182,14 +158,16 @@ async function getStreamsForContent(type, id, config) {
         }
 
         // --- Fallback 3: If we have a title from OMDb but no TMDB_ID, search TMDb with the title ---
-        if (queryTitle && !TMDB_ID && type === 'series') {
+        if (queryTitle && !TMDB_ID) {
             try {
-                console.log(`[Addon Log] Have title from OMDb ("${queryTitle}"), but no TMDB_ID. Searching TMDb...`);
-                const searchUrl = `https://api.themoviedb.org/3/search/tv?api_key=${tmdbApiKey}&query=${encodeURIComponent(queryTitle)}&first_air_date_year=${queryYear || ''}`;
+                console.log(`[Addon Log] Have title ("${queryTitle}"), but no TMDB_ID. Searching TMDb...`);
+                // OMDb year can be a range (e.g., "2006–2007"), so just take the first 4 digits.
+                const searchYear = queryYear ? queryYear.toString().substring(0, 4) : '';
+                const searchUrl = `https://api.themoviedb.org/3/search/${type === 'movie' ? 'movie' : 'tv'}?api_key=${tmdbApiKey}&query=${encodeURIComponent(queryTitle)}&first_air_date_year=${searchYear}`;
                 const searchResponse = await axios.get(searchUrl);
                 if (searchResponse.data && searchResponse.data.results.length > 0) {
-                    // To improve accuracy, find the best match (e.g., by checking name and year)
-                    const bestMatch = searchResponse.data.results.find(r => r.name === queryTitle);
+                    // To improve accuracy, find the best match by name
+                    const bestMatch = searchResponse.data.results.find(r => (r.name || r.title) === queryTitle);
                     TMDB_ID = bestMatch ? bestMatch.id : searchResponse.data.results[0].id; // Fallback to first result
                     console.log(`[Addon Log] Found TMDB_ID via search: ${TMDB_ID}`);
                 }
@@ -197,7 +175,6 @@ async function getStreamsForContent(type, id, config) {
                 console.warn(`[Addon Log] TMDb search fallback failed: ${searchError.message}`);
             }
         }
-
 
         if (!queryTitle) {
             console.log('[Addon Log] Failed to retrieve title from TMDb or OMDb using any method. Cannot generate search link.');
