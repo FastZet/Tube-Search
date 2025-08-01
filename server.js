@@ -181,6 +181,23 @@ async function getStreamsForContent(type, id, config) {
             }
         }
 
+        // --- Fallback 3: If we have a title from OMDb but no TMDB_ID, search TMDb with the title ---
+        if (queryTitle && !TMDB_ID && type === 'series') {
+            try {
+                console.log(`[Addon Log] Have title from OMDb ("${queryTitle}"), but no TMDB_ID. Searching TMDb...`);
+                const searchUrl = `https://api.themoviedb.org/3/search/tv?api_key=${tmdbApiKey}&query=${encodeURIComponent(queryTitle)}&first_air_date_year=${queryYear || ''}`;
+                const searchResponse = await axios.get(searchUrl);
+                if (searchResponse.data && searchResponse.data.results.length > 0) {
+                    // To improve accuracy, find the best match (e.g., by checking name and year)
+                    const bestMatch = searchResponse.data.results.find(r => r.name === queryTitle);
+                    TMDB_ID = bestMatch ? bestMatch.id : searchResponse.data.results[0].id; // Fallback to first result
+                    console.log(`[Addon Log] Found TMDB_ID via search: ${TMDB_ID}`);
+                }
+            } catch (searchError) {
+                console.warn(`[Addon Log] TMDb search fallback failed: ${searchError.message}`);
+            }
+        }
+
 
         if (!queryTitle) {
             console.log('[Addon Log] Failed to retrieve title from TMDb or OMDb using any method. Cannot generate search link.');
