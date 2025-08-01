@@ -187,12 +187,30 @@ async function getStreamsForContent(type, id, config) {
             return { streams: [] };
         }
 
+        // --- Fetch episode name for series ---
+        let episodeTitle = '';
+        if (type === 'series' && TMDB_ID && seasonNum && episodeNum) {
+            try {
+                const episodeUrl = `https://api.themoviedb.org/3/tv/${TMDB_ID}/season/${seasonNum}/episode/${episodeNum}?api_key=${tmdbApiKey}`;
+                console.log(`[Addon Log] Fetching episode details: ${episodeUrl}`);
+                const episodeResponse = await axios.get(episodeUrl);
+                if (episodeResponse.data && episodeResponse.data.name) {
+                    episodeTitle = episodeResponse.data.name;
+                    console.log(`[Addon Log] Found episode name: "${episodeTitle}"`);
+                }
+            } catch (e) {
+                console.warn(`[Addon Log] Could not fetch episode name. Search will proceed without it. Error: ${e.message}`);
+            }
+        }
+
         // --- Step 3: Generate Google Search Stream Result ---
         let googleSearchQuery = `${queryTitle} ${queryYear || ''}`;
         if (type === 'movie') {
             googleSearchQuery += ' full movie';
         } else if (type === 'series' && seasonNum && episodeNum) {
-            googleSearchQuery = `${queryTitle} S${seasonNum} E${episodeNum}`;
+            const paddedSeason = seasonNum.toString().padStart(2, '0');
+            const paddedEpisode = episodeNum.toString().padStart(2, '0');
+            googleSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode} ${episodeTitle || ''}`.trim();
         }
         
         const streams = [];
