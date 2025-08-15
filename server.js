@@ -232,7 +232,7 @@ async function getStreamsForContent(type, id, config) {
             const paddedEpisode = episodeNum.toString().padStart(2, '0');
 
             // ALWAYS provide the generic search link (without episode name)
-            const genericSearchQuery = `${queryTitle} S${paddedSeason}E${paddedEpisode}`;
+            const genericSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode}`;
             const genericSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(genericSearchQuery)}&tbs=dur:l&tbm=vid`;
             streams.unshift({
                 title: `🔍 Google (Without Episode Title)\n${genericSearchQuery}`,
@@ -242,7 +242,7 @@ async function getStreamsForContent(type, id, config) {
 
             // If we found an episode title, ALSO provide the more specific search link
             if (episodeTitle) {
-                const specificSearchQuery = `${queryTitle} S${paddedSeason}E${paddedEpisode} ${episodeTitle}`.trim();
+                const specificSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode} ${episodeTitle}`.trim();
                 const specificSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(specificSearchQuery)}&tbs=dur:l&tbm=vid`;
                 streams.unshift({
                     title: `🔍 Google (With Episode Title)\n${specificSearchQuery}`,
