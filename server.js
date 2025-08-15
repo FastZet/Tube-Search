@@ -235,7 +235,7 @@ async function getStreamsForContent(type, id, config) {
             const genericSearchQuery = `${queryTitle} S${paddedSeason}E${paddedEpisode}`;
             const genericSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(genericSearchQuery)}&tbs=dur:l&tbm=vid`;
             streams.unshift({
-                title: `🔍 Google (No Episode Name)\n${genericSearchQuery}`,
+                title: `🔍 Google (Without Episode Title)\n${genericSearchQuery}`,
                 externalUrl: genericSearchLink,
                 behaviorHints: { externalUrl: true }
             });
@@ -245,7 +245,7 @@ async function getStreamsForContent(type, id, config) {
                 const specificSearchQuery = `${queryTitle} S${paddedSeason}E${paddedEpisode} ${episodeTitle}`.trim();
                 const specificSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(specificSearchQuery)}&tbs=dur:l&tbm=vid`;
                 streams.unshift({
-                    title: `🔍 Google (Full Title)\n${specificSearchQuery}`,
+                    title: `🔍 Google (With Episode Title)\n${specificSearchQuery}`,
                     externalUrl: specificSearchLink,
                     behaviorHints: { externalUrl: true }
                 });
