@@ -214,29 +214,45 @@ async function getStreamsForContent(type, id, config) {
         }
 
         // --- Step 3: Generate Google Search Stream Result ---
-        let googleSearchQuery = `${queryTitle} ${queryYear || ''}`;
+        const streams = [];
+        const googleSearchBaseUrl = "https://www.google.com/search?";
+
         if (type === 'movie') {
-            googleSearchQuery += ' full movie';
+            const googleSearchQuery = `${queryTitle} ${queryYear || ''} full movie`;
+            const googleSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(googleSearchQuery)}&tbs=dur:l&tbm=vid`;
+            
+            streams.unshift({ 
+                title: `🔍 Google Search: "${googleSearchQuery}" (Long Videos)`,
+                externalUrl: googleSearchLink, 
+                behaviorHints: { externalUrl: true }
+            });
+
         } else if (type === 'series' && seasonNum && episodeNum) {
             const paddedSeason = seasonNum.toString().padStart(2, '0');
             const paddedEpisode = episodeNum.toString().padStart(2, '0');
-            googleSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode} ${episodeTitle || ''}`.trim();
-        }
-        
-        const streams = [];
 
-        const googleSearchBaseUrl = "https://www.google.com/search?";
-        const googleSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(googleSearchQuery)}&tbs=dur:l&tbm=vid`;
+            // ALWAYS provide the generic search link (without episode name)
+            const genericSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode}`;
+            const genericSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(genericSearchQuery)}&tbs=dur:l&tbm=vid`;
+            streams.unshift({
+                title: `🔍 Google (Without Title)\n${genericSearchQuery}`,
+                externalUrl: genericSearchLink,
+                behaviorHints: { externalUrl: true }
+            });
 
-        streams.unshift({ 
-            title: `🔎 Google Search: "${googleSearchQuery}" (Long Videos)`,
-            externalUrl: googleSearchLink, 
-            behaviorHints: {
-                externalUrl: true 
+            // If we found an episode title, ALSO provide the more specific search link
+            if (episodeTitle) {
+                const specificSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode} ${episodeTitle}`.trim();
+                const specificSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(specificSearchQuery)}&tbs=dur:l&tbm=vid`;
+                streams.unshift({
+                    title: `🔍 Google (With Title)\n${specificSearchQuery}`,
+                    externalUrl: specificSearchLink,
+                    behaviorHints: { externalUrl: true }
+                });
             }
-        });
-        console.log('[Addon Log] Added Google Search stream result.');
+        }
 
+        console.log('[Addon Log] Added Google Search stream result(s).');
         return { streams };
 
     } catch (error) {
