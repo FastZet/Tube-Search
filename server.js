@@ -135,13 +135,13 @@ async function getStreamsForContent(type, id, config) {
         const genericSearchLink = `https://www.google.com/search?q=${encodeURIComponent(genericQuery)}&tbs=dur:l&tbm=vid`;
         
         // Add "No Title" search link first
-        streams.push({ title: `🔍 No Title: See all on Google`, externalUrl: genericSearchLink, behaviorHints: { externalUrl: true } });
+        streams.push({ title: `🔍 No Title: See all results on Google...`, externalUrl: genericSearchLink, behaviorHints: { externalUrl: true } });
 
         // Add "With Title" search link if an episode title exists
         if (episodeTitle) {
             const specificQuery = `${queryTitle} ${spacedSE} ${episodeTitle}`;
             const specificSearchLink = `https://www.google.com/search?q=${encodeURIComponent(specificQuery)}&tbs=dur:l&tbm=vid`;
-            streams.push({ title: `🔍 With Title: See all on Google`, externalUrl: specificSearchLink, behaviorHints: { externalUrl: true } });
+            streams.push({ title: `🔍 With Title: See all results on Google...`, externalUrl: specificSearchLink, behaviorHints: { externalUrl: true } });
         }
     } else if (type === 'movie') {
         const movieQuery = `${queryTitle} ${queryYear || ''} full movie`;
