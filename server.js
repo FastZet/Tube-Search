@@ -46,9 +46,8 @@ async function getStreamsForContent(type, id, config) {
         console.log('[Log Step 1/5] Starting metadata enrichment...');
         // --- (Metadata fetching logic) ---
         let rawContentId = id;
-        if (type === 'series') {
-            const parts = id.split(':'); rawContentId = parts[0]; IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null; TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null); seasonNum = parts[1]; episodeNum = parts[2];
-        } else if (type === 'movie') { rawContentId = id; IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null; TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null); }
+        if (type === 'series') { const parts = id.split(':'); rawContentId = parts[0]; IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null; TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null); seasonNum = parts[1]; episodeNum = parts[2]; } 
+        else if (type === 'movie') { rawContentId = id; IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null; TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null); }
         if (TMDB_ID && isNaN(TMDB_ID) && TMDB_ID.includes(':')) { TMDB_ID = TMDB_ID.split(':')[1]; } else if (TMDB_ID && isNaN(TMDB_ID) && !TMDB_ID.startsWith('tt')) { TMDB_ID = null; }
         if (IMDB_ID) { try { const res = await axios.get(`https://api.themoviedb.org/3/find/${IMDB_ID}?api_key=${tmdbApiKey}&external_source=imdb_id`); if (type === 'movie' && res.data.movie_results.length > 0) { TMDB_ID = res.data.movie_results[0].id; queryTitle = res.data.movie_results[0].title; queryYear = new Date(res.data.movie_results[0].release_date).getFullYear(); } else if (type === 'series' && res.data.tv_results.length > 0) { TMDB_ID = res.data.tv_results[0].id; queryTitle = res.data.tv_results[0].name; queryYear = new Date(res.data.tv_results[0].first_air_date).getFullYear(); } } catch (e) { console.warn(`[Log] TMDb Find error: ${e.message}.`); } }
         if (TMDB_ID && !queryTitle) { try { const url = (type === 'movie') ? `https://api.themoviedb.org/3/movie/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids` : `https://api.themoviedb.org/3/tv/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids`; const res = await axios.get(url); queryTitle = type === 'movie' ? res.data.title : res.data.name; queryYear = type === 'movie' ? new Date(res.data.release_date).getFullYear() : new Date(res.data.first_air_date).getFullYear(); if (type === 'movie' && res.data.runtime) apiRuntime = res.data.runtime; if (!IMDB_ID && res.data.external_ids?.imdb_id) IMDB_ID = res.data.external_ids.imdb_id; } catch (e) { console.warn(`[Log] Direct TMDb lookup failed: ${e.message}`); } }
@@ -114,8 +113,9 @@ async function getStreamsForContent(type, id, config) {
             
             // Whitelist Bonus
             if (videoDomains.some(domain => result.url.includes(domain))) { scoreBreakdown.whitelist = 1; }
-
-            const totalScore = Object.values(scoreBreakdown).reduce((sum, val) => (typeof val === 'number' ? sum + val : sum), 0);
+            
+            // **THE FIX IS HERE**
+            const totalScore = scoreBreakdown.title + scoreBreakdown.s_e + scoreBreakdown.duration + scoreBreakdown.whitelist;
             return { score: totalScore, breakdown: scoreBreakdown };
         };
 
