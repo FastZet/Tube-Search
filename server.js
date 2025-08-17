@@ -62,10 +62,10 @@ async function getStreamsForContent(type, id, config) {
         const searchQueries = [];
         const paddedSeason = type === 'series' ? seasonNum.toString().padStart(2, '0') : '';
         const paddedEpisode = type === 'series' ? episodeNum.toString().padStart(2, '0') : '';
-        const seasonEpisodeString = type === 'series' ? `S${paddedSeason}E${paddedEpisode}` : '';
+        const compactSE = type === 'series' ? `S${paddedSeason}E${paddedEpisode}` : '';
 
         if (type === 'movie') { searchQueries.push(`${queryTitle} ${queryYear || ''} full movie`); }
-        else { searchQueries.push(`${queryTitle} ${seasonEpisodeString} ${episodeTitle || ''}`.trim()); if (episodeTitle) { searchQueries.push(`${queryTitle} ${seasonEpisodeString}`); } }
+        else { searchQueries.push(`${queryTitle} ${compactSE} ${episodeTitle || ''}`.trim()); if (episodeTitle) { searchQueries.push(`${queryTitle} ${compactSE}`); } }
 
         let allResults = []; const seenUrls = new Set();
         console.log(`[Log Step 2/5] Starting Google scraping for ${searchQueries.length} queries.`);
@@ -97,8 +97,23 @@ async function getStreamsForContent(type, id, config) {
             if (lowerTitle.includes(lowerQueryTitle)) { scoreBreakdown.title = 5; }
             else { const queryWords = lowerQueryTitle.split(' '); const matchedWords = queryWords.filter(word => lowerTitle.includes(word)); scoreBreakdown.title = 5 * (matchedWords.length / queryWords.length); if (queryWords.length > 2 && matchedWords.length < queryWords.length - 1) scoreBreakdown.title -= 5; }
             
-            // Season/Episode Scoring
-            if (type === 'series' && lowerTitle.includes(seasonEpisodeString.toLowerCase())) { scoreBreakdown.s_e = 4; }
+            // --- NEW: Granular Season/Episode Scoring ---
+            if (type === 'series') {
+                const s_num = parseInt(seasonNum, 10);
+                const ep_num = parseInt(episodeNum, 10);
+                const fullMatchRegex = new RegExp(`s0?${s_num}\\s*e0?${ep_num}|season\\s+0?${s_num}\\s+episode\\s+0?${ep_num}`, 'i');
+                const seasonMatchRegex = new RegExp(`season\\s+0?${s_num}|s0?${s_num}(?!e)`, 'i');
+                const episodeMatchRegex = new RegExp(`episode\\s+0?${ep_num}|e0?${ep_num}`, 'i');
+                
+                if (fullMatchRegex.test(lowerTitle)) {
+                    scoreBreakdown.s_e = 4; // Full match
+                } else {
+                    let partialScore = 0;
+                    if (seasonMatchRegex.test(lowerTitle)) partialScore += 2;
+                    if (episodeMatchRegex.test(lowerTitle)) partialScore += 2;
+                    scoreBreakdown.s_e = partialScore;
+                }
+            }
 
             // Duration Scoring
             if (apiRuntime > 0) {
@@ -114,7 +129,6 @@ async function getStreamsForContent(type, id, config) {
             // Whitelist Bonus
             if (videoDomains.some(domain => result.url.includes(domain))) { scoreBreakdown.whitelist = 1; }
             
-            // **THE FIX IS HERE**
             const totalScore = scoreBreakdown.title + scoreBreakdown.s_e + scoreBreakdown.duration + scoreBreakdown.whitelist;
             return { score: totalScore, breakdown: scoreBreakdown };
         };
