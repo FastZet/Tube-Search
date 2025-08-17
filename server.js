@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const cheerio = require('cheerio'); // The new library for parsing HTML
 const path = require('path');
 const manifest = require('./manifest.json');
 
@@ -30,7 +31,6 @@ function parseConfigString(configString) {
     return { tmdbApiKey, omdbApiKey };
 }
 
-
 // --- Helper function for fetching TMDb/OMDb data and Google Search ---
 async function getStreamsForContent(type, id, config) {
     const { tmdbApiKey, omdbApiKey } = config;
@@ -49,277 +49,237 @@ async function getStreamsForContent(type, id, config) {
     }
 
     let IMDB_ID = null;
-    let TMDB_ID = null; // This will hold the numeric TMDb ID
+    let TMDB_ID = null;
     let queryTitle = '';
     let queryYear = '';
-
-    // Series specific parsing (season/episode numbers)
-    let rawContentId = id; // Store the original ID passed to the function
-
     let seasonNum, episodeNum;
-    if (type === 'series') {
-        const parts = id.split(':');
-        rawContentId = parts[0]; // ttXXXXXXX or tmdb:XXXXXXX or XXXXXXX
-        IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null;
-        TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null);
-        
-        seasonNum = parts[1];
-        episodeNum = parts[2];
-        console.log(`[Addon Log] Parsed Series ID: Original=${id}, IMDB=${IMDB_ID}, TMDB=${TMDB_ID}, S:${seasonNum}, E:${episodeNum}`);
-    } else if (type === 'movie') {
-        rawContentId = id; // ttXXXXXXX or tmdb:XXXXXXX or XXXXXXX
-        IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null;
-        TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null);
-        
-        console.log(`[Addon Log] Parsed Movie ID: Original=${id}, IMDB=${IMDB_ID}, TMDB=${TMDB_ID}`);
-    }
-    
-    // Ensure TMDB_ID is null if it's still 'tmdb' or not a number when it should be.
-    if (TMDB_ID && isNaN(TMDB_ID) && TMDB_ID.includes(':')) {
-        TMDB_ID = TMDB_ID.split(':')[1];
-    } else if (TMDB_ID && isNaN(TMDB_ID) && !TMDB_ID.startsWith('tt')) {
-        TMDB_ID = null;
-    }
+    let episodeTitle = '';
 
-
+    // --- (This entire metadata fetching section is your existing, robust logic) ---
     try {
-        // --- Step 1: Get TMDb details based on provided ID ---
+        let rawContentId = id;
+        if (type === 'series') {
+            const parts = id.split(':');
+            rawContentId = parts[0];
+            IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null;
+            TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null);
+            seasonNum = parts[1];
+            episodeNum = parts[2];
+        } else if (type === 'movie') {
+            rawContentId = id;
+            IMDB_ID = rawContentId.startsWith('tt') ? rawContentId : null;
+            TMDB_ID = (IMDB_ID === null && rawContentId.includes(':')) ? rawContentId.split(':')[1] : (IMDB_ID === null ? rawContentId : null);
+        }
+        if (TMDB_ID && isNaN(TMDB_ID) && TMDB_ID.includes(':')) { TMDB_ID = TMDB_ID.split(':')[1]; }
+        else if (TMDB_ID && isNaN(TMDB_ID) && !TMDB_ID.startsWith('tt')) { TMDB_ID = null; }
+
         if (IMDB_ID) {
-            // Option 1: Try TMDb /find endpoint with IMDb ID
             try {
                 const tmdbFindUrl = `https://api.themoviedb.org/3/find/${IMDB_ID}?api_key=${tmdbApiKey}&external_source=imdb_id`;
-                console.log(`[Addon Log] Trying TMDb find with IMDb ID: ${IMDB_ID}`);
                 const tmdbFindResponse = await axios.get(tmdbFindUrl);
-
                 if (type === 'movie' && tmdbFindResponse.data.movie_results.length > 0) {
                     TMDB_ID = tmdbFindResponse.data.movie_results[0].id;
                     queryTitle = tmdbFindResponse.data.movie_results[0].title;
                     queryYear = (new Date(tmdbFindResponse.data.movie_results[0].release_date)).getFullYear();
-                    console.log(`[Addon Log] Found movie via TMDb Find: ${queryTitle}`);
                 } else if (type === 'series' && tmdbFindResponse.data.tv_results.length > 0) {
                     TMDB_ID = tmdbFindResponse.data.tv_results[0].id;
                     queryTitle = tmdbFindResponse.data.tv_results[0].name;
                     queryYear = (new Date(tmdbFindResponse.data.tv_results[0].first_air_date)).getFullYear();
-                    console.log(`[Addon Log] Found series via TMDb Find: ${queryTitle}`);
-                } else {
-                    console.log(`[Addon Log] TMDb Find did not return results for IMDb ID: ${IMDB_ID}. Trying direct lookup.`);
                 }
-            } catch (findError) {
-                console.warn(`[Addon Log] TMDb Find error for IMDb ID ${IMDB_ID}: ${findError.message}. Trying direct lookup.`);
-            }
+            } catch (findError) { console.warn(`[Addon Log] TMDb Find error for IMDb ID ${IMDB_ID}: ${findError.message}.`); }
         }
         
-        // If we still don't have a title, but we have a TMDB_ID (e.g., from a TMDB catalog addon)
         if (TMDB_ID && !queryTitle) {
-            const directTmdbUrl = (type === 'movie') ?
-                `https://api.themoviedb.org/3/movie/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids` :
-                `https://api.themoviedb.org/3/tv/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids`;
-            
+            const directTmdbUrl = (type === 'movie') ? `https://api.themoviedb.org/3/movie/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids` : `https://api.themoviedb.org/3/tv/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids`;
             try {
-                console.log(`[Addon Log] Trying direct TMDb lookup with TMDB ID: ${TMDB_ID}`);
                 const directTmdbResponse = await axios.get(directTmdbUrl);
-                if (type === 'movie') {
-                    queryTitle = directTmdbResponse.data.title;
-                    queryYear = (new Date(directTmdbResponse.data.release_date)).getFullYear();
-                    if (!IMDB_ID && directTmdbResponse.data.external_ids && directTmdbResponse.data.external_ids.imdb_id) {
-                        IMDB_ID = directTmdbResponse.data.external_ids.imdb_id;
-                        console.log(`[Addon Log] Retrieved IMDb ID from TMDb external_ids: ${IMDB_ID}`);
-                    }
-                } else { // series
-                    queryTitle = directTmdbResponse.data.name;
-                    queryYear = (new Date(directTmdbResponse.data.first_air_date)).getFullYear();
-                    if (!IMDB_ID && directTmdbResponse.data.external_ids && directTmdbResponse.data.external_ids.imdb_id) {
-                        IMDB_ID = directTmdbResponse.data.external_ids.imdb_id;
-                        console.log(`[Addon Log] Retrieved IMDb ID from TMDb external_ids: ${IMDB_ID}`);
-                    }
+                queryTitle = type === 'movie' ? directTmdbResponse.data.title : directTmdbResponse.data.name;
+                queryYear = type === 'movie' ? (new Date(directTmdbResponse.data.release_date)).getFullYear() : (new Date(directTmdbResponse.data.first_air_date)).getFullYear();
+                if (!IMDB_ID && directTmdbResponse.data.external_ids && directTmdbResponse.data.external_ids.imdb_id) {
+                    IMDB_ID = directTmdbResponse.data.external_ids.imdb_id;
                 }
-                console.log(`[Addon Log] Found ${type} via direct TMDb ID lookup: ${queryTitle}`);
-            } catch (tmdbIdError) {
-                console.warn(`[Addon Log] Direct TMDb lookup failed for TMDB ID ${TMDB_ID}: ${tmdbIdError.message}`);
-            }
+            } catch (tmdbIdError) { console.warn(`[Addon Log] Direct TMDb lookup failed for TMDB ID ${TMDB_ID}: ${tmdbIdError.message}`); }
         }
 
-        // --- Fallback 2: OMDb API if TMDb failed and we have an IMDb ID ---
         if (!queryTitle && IMDB_ID && omdbApiKey) {
             const omdbUrl = `http://www.omdbapi.com/?apikey=${omdbApiKey}&i=${IMDB_ID}&plot=short&r=json`;
             try {
-                console.log(`[Addon Log] TMDb lookup failed. Trying OMDb for IMDb ID: ${IMDB_ID}`);
                 const omdbResponse = await axios.get(omdbUrl);
                 if (omdbResponse.data.Response === 'True') {
                     queryTitle = omdbResponse.data.Title;
                     queryYear = omdbResponse.data.Year ? parseInt(omdbResponse.data.Year.substring(0,4)) : '';
-                    console.log(`[Addon Log] Found content via OMDb: ${queryTitle}`);
-                } else {
-                    console.warn(`[Addon Log] OMDb did not return results for IMDb ID ${IMDB_ID}: ${omdbResponse.data.Error}`);
                 }
-            } catch (omdbError) {
-                console.error(`[Addon Log] OMDb API error for IMDb ID ${IMDB_ID}: ${omdbError.message}`);
-            }
+            } catch (omdbError) { console.error(`[Addon Log] OMDb API error for IMDb ID ${IMDB_ID}: ${omdbError.message}`); }
         }
 
-        // --- Fallback 3: If we have a title from OMDb but no TMDB_ID, search TMDb with the title ---
         if (queryTitle && !TMDB_ID) {
             try {
-                console.log(`[Addon Log] Have title ("${queryTitle}"), but no TMDB_ID. Searching TMDb...`);
-                // OMDb year can be a range (e.g., "2006–2007"), so just take the first 4 digits.
                 const searchYear = queryYear ? queryYear.toString().substring(0, 4) : '';
                 const searchUrl = `https://api.themoviedb.org/3/search/${type === 'movie' ? 'movie' : 'tv'}?api_key=${tmdbApiKey}&query=${encodeURIComponent(queryTitle)}&first_air_date_year=${searchYear}`;
                 const searchResponse = await axios.get(searchUrl);
                 if (searchResponse.data && searchResponse.data.results.length > 0) {
-                    // To improve accuracy, find the best match by name
                     const bestMatch = searchResponse.data.results.find(r => (r.name || r.title) === queryTitle);
-                    TMDB_ID = bestMatch ? bestMatch.id : searchResponse.data.results[0].id; // Fallback to first result
-                    console.log(`[Addon Log] Found TMDB_ID via search: ${TMDB_ID}`);
+                    TMDB_ID = bestMatch ? bestMatch.id : searchResponse.data.results[0].id;
                 }
-            } catch (searchError) {
-                console.warn(`[Addon Log] TMDb search fallback failed: ${searchError.message}`);
-            }
+            } catch (searchError) { console.warn(`[Addon Log] TMDb search fallback failed: ${searchError.message}`); }
         }
 
         if (!queryTitle) {
-            console.log('[Addon Log] Failed to retrieve title from TMDb or OMDb using any method. Cannot generate search link.');
+            console.log('[Addon Log] Failed to retrieve title. Cannot generate search link.');
             return { streams: [] };
         }
 
-        // --- Fetch episode name for series ---
-        let episodeTitle = '';
-        // First, try to get episode name from TMDb if we have the ID
         if (type === 'series' && TMDB_ID && seasonNum && episodeNum) {
             try {
                 const episodeUrl = `https://api.themoviedb.org/3/tv/${TMDB_ID}/season/${seasonNum}/episode/${episodeNum}?api_key=${tmdbApiKey}`;
-                console.log(`[Addon Log] Fetching episode details: ${episodeUrl}`);
                 const episodeResponse = await axios.get(episodeUrl);
                 if (episodeResponse.data && episodeResponse.data.name) {
                     episodeTitle = episodeResponse.data.name;
-                    console.log(`[Addon Log] Found episode name via TMDb: "${episodeTitle}"`);
                 }
-            } catch (e) {
-                console.warn(`[Addon Log] Could not fetch episode name. Search will proceed without it. Error: ${e.message}`);
-            }
+            } catch (e) { /* Episode name is optional, so we ignore errors */ }
         }
-
-        // Fallback: If TMDb failed and we have an IMDb ID, try getting the episode name from OMDb
         if (!episodeTitle && type === 'series' && IMDB_ID && seasonNum && episodeNum && omdbApiKey) {
             try {
                 const omdbEpisodeUrl = `http://www.omdbapi.com/?apikey=${omdbApiKey}&i=${IMDB_ID}&Season=${seasonNum}&Episode=${episodeNum}`;
-                console.log(`[Addon Log] Could not get episode from TMDb, trying OMDb: ${omdbEpisodeUrl}`);
                 const omdbEpisodeResponse = await axios.get(omdbEpisodeUrl);
                 if (omdbEpisodeResponse.data && omdbEpisodeResponse.data.Response === 'True' && omdbEpisodeResponse.data.Title) {
                     episodeTitle = omdbEpisodeResponse.data.Title;
-                    console.log(`[Addon Log] Found episode name via OMDb: "${episodeTitle}"`);
                 }
-            } catch (e) {
-                console.warn(`[Addon Log] OMDb episode lookup failed. Error: ${e.message}`);
-            }
+            } catch (e) { /* Also optional */ }
         }
 
-        // --- Step 3: Generate Google Search Stream Result ---
-        const streams = [];
-        const googleSearchBaseUrl = "https://www.google.com/search?";
-
+        // --- NEW LOGIC STARTS HERE: SCRAPING FEATURE ---
+        
+        let googleSearchQuery;
         if (type === 'movie') {
-            const googleSearchQuery = `${queryTitle} ${queryYear || ''} full movie`;
-            const googleSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(googleSearchQuery)}&tbs=dur:l&tbm=vid`;
-            
-            streams.unshift({ 
-                title: `🔍 Google Search: "${googleSearchQuery}" (Long Videos)`,
-                externalUrl: googleSearchLink, 
-                behaviorHints: { externalUrl: true }
-            });
-
+            googleSearchQuery = `${queryTitle} ${queryYear || ''} full movie`;
         } else if (type === 'series' && seasonNum && episodeNum) {
             const paddedSeason = seasonNum.toString().padStart(2, '0');
             const paddedEpisode = episodeNum.toString().padStart(2, '0');
+            // Use the most specific query available for scraping
+            googleSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode} ${episodeTitle || ''}`.trim();
+        } else {
+            return { streams: [] };
+        }
 
-            // ALWAYS provide the generic search link (without episode name)
-            const genericSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode}`;
-            const genericSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(genericSearchQuery)}&tbs=dur:l&tbm=vid`;
-            streams.unshift({
-                title: `🔍 Google (Without Title)\n${genericSearchQuery}`,
-                externalUrl: genericSearchLink,
-                behaviorHints: { externalUrl: true }
+        const googleSearchLink = `https://www.google.com/search?q=${encodeURIComponent(googleSearchQuery)}&tbs=dur:l&tbm=vid`;
+        let streams = [];
+
+        try {
+            console.log(`[Addon Log] Scraping Google for: "${googleSearchQuery}"`);
+            const { data: html } = await axios.get(googleSearchLink, {
+                headers: {
+                    // Updated User-Agent for August 2025
+                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36'
+                }
             });
 
-            // If we found an episode title, ALSO provide the more specific search link
-            if (episodeTitle) {
-                const specificSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode} ${episodeTitle}`.trim();
-                const specificSearchLink = `${googleSearchBaseUrl}q=${encodeURIComponent(specificSearchQuery)}&tbs=dur:l&tbm=vid`;
-                streams.unshift({
-                    title: `🔍 Google (With Title)\n${specificSearchQuery}`,
-                    externalUrl: specificSearchLink,
+            const $ = cheerio.load(html);
+            const results = [];
+
+            $('div.vt6azd').slice(0, 5).each((i, el) => {
+                const titleEl = $(el).find('h3.LC20lb');
+                const linkEl = $(el).find('a.VfSr4c');
+                const citeEl = $(el).find('cite.tLk3Jb');
+                const durationEl = $(el).find('.c8rnLc span');
+                const title = titleEl.text();
+                let url = linkEl.attr('href');
+                
+                if (url && url.startsWith('/url?q=')) {
+                    const urlParams = new URLSearchParams(url.split('?')[1]);
+                    url = urlParams.get('q');
+                }
+
+                const source = citeEl.first().text().split(' › ')[0].replace('www.', '');
+                const duration = durationEl.text();
+
+                if (title && url && url.startsWith('http')) {
+                    results.push({ title, url, source, duration });
+                }
+            });
+
+            if (results.length === 0) {
+                throw new Error('Parsing failed; no video results found on page.');
+            }
+
+            console.log(`[Addon Log] Found ${results.length} streamable results.`);
+            results.forEach(res => {
+                streams.push({
+                    title: `[${res.source || 'Stream'}] ${res.title}\n${res.duration ? `Duration: ${res.duration}` : ''}`,
+                    externalUrl: res.url,
                     behaviorHints: { externalUrl: true }
                 });
+            });
+
+        } catch (error) {
+            // --- FALLBACK MECHANISM ---
+            console.error(`[Addon Log] Scraping failed: ${error.message}. Reverting to simple search links.`);
+            // Use your original, reliable link-generation logic as the fallback
+            if (type === 'movie') {
+                streams.push({ 
+                    title: `[Scraping Failed] 🔍 Google Search`,
+                    externalUrl: googleSearchLink, 
+                    behaviorHints: { externalUrl: true }
+                });
+            } else if (type === 'series') {
+                const paddedSeason = seasonNum.toString().padStart(2, '0');
+                const paddedEpisode = episodeNum.toString().padStart(2, '0');
+                const genericSearchQuery = `${queryTitle} S${paddedSeason} E${paddedEpisode}`;
+                const genericSearchLink = `https://www.google.com/search?q=${encodeURIComponent(genericSearchQuery)}&tbs=dur:l&tbm=vid`;
+                streams.push({
+                    title: `[Scraping Failed] 🔍 Google (No Title)`,
+                    externalUrl: genericSearchLink,
+                    behaviorHints: { externalUrl: true }
+                });
+                if (episodeTitle) {
+                    streams.unshift({ // Add the more specific one first
+                        title: `[Scraping Failed] 🔍 Google (With Title)`,
+                        externalUrl: googleSearchLink, // This already has the full title
+                        behaviorHints: { externalUrl: true }
+                    });
+                }
             }
         }
 
-        console.log('[Addon Log] Added Google Search stream result(s).');
+        // Always add a "More Results" link at the end
+        if (streams.length > 0) {
+            streams.push({
+                title: `🔍 See all results on Google...`,
+                externalUrl: googleSearchLink,
+                behaviorHints: { externalUrl: true }
+            });
+        }
+        
         return { streams };
 
     } catch (error) {
         console.error(`[Addon Log] General error in getStreamsForContent:`, error.message);
-        if (error.response) {
-            console.error(`[Addon Log] API Error Status: ${error.response.status}, Data:`, error.response.data);
-            if (error.response.status === 403) {
-                return { streams: [], error: 'API Key (403): Quota Exceeded or Permissions Issue. Check TMDb/OMDb keys.' };
-            }
-            if (error.response.status === 401) {
-                return { streams: [], error: 'API Key (401): Unauthorized. Check your TMDb/OMDb keys.' };
-            }
-            if (error.response.status === 404) {
-                return { streams: [], error: 'Content not found on TMDb/OMDb.' };
-            }
-        }
         return { streams: [], error: 'Failed to retrieve streams due to an internal error.' };
     }
 }
 
 
 // --- Stremio Add-on API Routes ---
-
-// NEW: Manifest route with config string as path parameter
 app.get('/:configString/manifest.json', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
-
-  // Parse API keys from the single config string
   const { tmdbApiKey, omdbApiKey } = parseConfigString(req.params.configString);
-
   const configuredManifest = { ...manifest };
-  // Update unique ID and name using parts of the keys
   configuredManifest.id = configuredManifest.id + `_${tmdbApiKey.substring(0,5)}_${omdbApiKey.substring(0,5)}`; 
   configuredManifest.name = `Tube Search`; 
-  configuredManifest.config = {
-    tmdbApiKey,
-    omdbApiKey
-  };
-  
+  configuredManifest.config = { tmdbApiKey, omdbApiKey };
   res.json(configuredManifest);
 });
 
-// NEW: Stream route with config string as path parameter
 app.get('/:configString/stream/:type/:id.json', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
-  
-  // Parse API keys from the single config string
   const { tmdbApiKey, omdbApiKey } = parseConfigString(req.params.configString);
-
-  const { type, id } = req.params; // type and id are still separate path params
-  console.log(`[Server Log] Received stream request for Type: ${type}, ID: ${id}`); 
-
+  const { type, id } = req.params;
   try {
-    const config = {
-        tmdbApiKey,
-        omdbApiKey
-    };
-    
-    console.log(`[Server Log] Parsed stream arguments: ${JSON.stringify({ type, id })} with config: ${JSON.stringify(config)}`); 
-    
+    const config = { tmdbApiKey, omdbApiKey };
     const result = await getStreamsForContent(type, id, config); 
-    
-    console.log(`[Server Log] Stream handler returned result: ${result.streams ? result.streams.length + ' streams' : result.error}`); 
     res.json(result);
-
   } catch (error) {
     console.error('[Server Log] Stream handler error:', error);
     res.status(500).json({ err: 'Internal server error processing stream request.' });
@@ -327,36 +287,25 @@ app.get('/:configString/stream/:type/:id.json', async (req, res) => {
 });
 
 // --- Custom Configuration Page Route ---
-
-// Redirect root path to /configure
 app.get('/', (req, res) => {
     res.redirect('/configure');
 });
 
-// Explicitly serve configure.html for the /configure path
-// This route now also accommodates the config string for pre-filling the form.
 app.get('/:configString?/configure', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
-
-// Serve other static assets from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-
-// Fallback for any other request not handled by specific routes
 app.get('*', (req, res) => {
     res.status(404).send('Not Found');
 });
-
 
 // Start the HTTP server
 const PORT = process.env.PORT || 7860;
 app.listen(PORT, () => {
     console.log(`Tube Search add-on running on port ${PORT}`);
-    // Updated example URL to reflect combined config string
     console.log(`Manifest URL (example): http://localhost:${PORT}/tmdb=YOUR_TMDB_KEY|omdb=YOUR_OMDB_KEY/manifest.json`);
-    console.log(`Configure URL: http://localhost:${PORT}/configure (or directly with keys: /tmdb=YOUR_TMDB_KEY|omdb=YOUR_OMDB_KEY/configure)`);
 });
