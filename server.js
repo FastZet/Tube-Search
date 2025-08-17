@@ -126,8 +126,7 @@ async function getStreamsForContent(type, id, config) {
         const scrapePromises = searchQueries.map(async (query) => {
             const googleSearchLink = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbs=dur:l&tbm=vid`;
             try {
-                const response = await axios.get(googleSearchLink, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36
-' } });
+                const response = await axios.get(googleSearchLink, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36' } });
                 return { query, html: response.data, success: true };
             } catch (error) {
                 console.error(`[Log] Failed to scrape query "${query}": ${error.message}`);
