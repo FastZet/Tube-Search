@@ -137,7 +137,7 @@ async function getStreamsForContent(type, id, config) {
         
         if (apiRuntime) { console.log(`[Addon Log] Official runtime from API: ${apiRuntime} minutes.`); }
 
-        // --- HYBRID SCRAPING LOGIC ---
+        // --- FINAL HYBRID SCRAPING LOGIC ---
         let googleSearchQuery;
         if (type === 'movie') { googleSearchQuery = `${queryTitle} ${queryYear || ''} full movie`; }
         else { const pS = seasonNum.toString().padStart(2, '0'); const pE = episodeNum.toString().padStart(2, '0'); googleSearchQuery = `${queryTitle} S${pS} E${pE} ${episodeTitle || ''}`.trim(); }
@@ -148,22 +148,32 @@ async function getStreamsForContent(type, id, config) {
 
         try {
             console.log(`[Addon Log] Scraping Google for: "${googleSearchQuery}"`);
-            const response = await axios.get(googleSearchLink, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36' } });
+            const response = await axios.get(googleSearchLink, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36' } });
             html = response.data;
             const $ = cheerio.load(html);
             let results = [];
             const seenUrls = new Set();
             
-            // --- ATTEMPT A: Structured Scraping (High Quality) ---
+            // --- ATTEMPT A: Structured Scraping (High Quality & Fixes the Jumbled Title Bug) ---
             console.log('[Addon Log] Attempting primary scraping strategy (structured).');
-            $('div.vt6azd, div.MjjYud').each((i, el) => {
-                const linkEl = $(el).find('a');
+            // This selector is now more specific to prevent grabbing a container of all results.
+            $('div.vt6azd').each((i, el) => {
+                const linkEl = $(el).find('a').first(); // Find the primary link in the block
                 let url = linkEl.attr('href');
                 if (url && url.startsWith('/url?q=')) { url = new URLSearchParams(url.split('?')[1]).get('q'); }
+
                 if (url && url.startsWith('http') && !seenUrls.has(url)) {
-                    const title = $(el).find('h3.LC20lb').text();
+                    // NEW: Title Cleaning Logic
+                    let title = $(el).find('h3.LC20lb').first().text();
+                    title = title.replace(/ - video Dailymotion/i, '')
+                                 .replace(/\| YouTube/i, '')
+                                 .replace(/- YouTube/i, '')
+                                 .replace(/\| Facebook/i, '')
+                                 .trim().replace(/[\s\-,|]+$/, ''); // Remove trailing junk characters
+
                     const source = $(el).find('cite').first().text().split(' › ')[0].replace('www.', '');
-                    const duration = $(el).find('.c8rnLc span, .O1CVkc').text();
+                    const duration = $(el).find('.c8rnLc span, .O1CVkc').first().text();
+                    
                     if(title) {
                         results.push({ title, url, source, duration });
                         seenUrls.add(url);
@@ -171,17 +181,21 @@ async function getStreamsForContent(type, id, config) {
                 }
             });
 
-            // --- ATTEMPT B: Link-based Fallback Scraping (More Resilient) ---
+            // --- ATTEMPT B: Link-based Fallback (If structured approach fails) ---
             if (results.length === 0) {
                 console.warn('[Addon Log] Primary strategy failed. Attempting fallback link search.');
-                const videoDomains = ['youtube.com', 'dailymotion.com', 'vimeo.com', 'archive.org', 'vk.com', 'ok.ru']; // Whitelist for fallback
                 $('a').each((i, el) => {
                     let url = $(el).attr('href');
                     if (url && url.startsWith('/url?q=')) { url = new URLSearchParams(url.split('?')[1]).get('q'); }
                     if (!url || !url.startsWith('http') || seenUrls.has(url)) return;
-                    if (videoDomains.some(domain => url.includes(domain))) {
+
+                    // This logic remains a good fallback
+                    const videoPattern = /(youtube\.com|dailymotion\.com|vimeo\.com|archive\.org|vk\.com)/;
+                    if (videoPattern.test(url)) {
                         let title = ($(el).find('h3').text() || $(el).text()).trim();
-                        if (title) {
+                         if (title) {
+                            // Apply the same cleaning logic
+                            title = title.replace(/ - video Dailymotion/i, '').replace(/\| YouTube/i, '').trim().replace(/[\s\-,|]+$/, '');
                             results.push({ title, url, source: new URL(url).hostname.replace('www.', ''), duration: '' });
                             seenUrls.add(url);
                         }
@@ -195,7 +209,7 @@ async function getStreamsForContent(type, id, config) {
                 const originalCount = results.length;
                 results = results.filter(res => {
                     const scrapedMinutes = parseDurationToMinutes(res.duration);
-                    if (scrapedMinutes === null) return true; // Keep if we can't parse duration
+                    if (scrapedMinutes === null) return true;
                     return Math.abs(scrapedMinutes - apiRuntime) <= tolerance;
                 });
                 console.log(`[Addon Log] Filtered by duration: ${originalCount} -> ${results.length} results.`);
