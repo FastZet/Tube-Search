@@ -62,10 +62,10 @@ async function getStreamsForContent(type, id, config) {
         const searchQueries = [];
         const paddedSeason = type === 'series' ? seasonNum.toString().padStart(2, '0') : '';
         const paddedEpisode = type === 'series' ? episodeNum.toString().padStart(2, '0') : '';
-        const compactSE = type === 'series' ? `S${paddedSeason}E${paddedEpisode}` : '';
+        const seasonEpisodeString = type === 'series' ? `S${paddedSeason}E${paddedEpisode}` : '';
 
         if (type === 'movie') { searchQueries.push(`${queryTitle} ${queryYear || ''} full movie`); }
-        else { searchQueries.push(`${queryTitle} ${compactSE} ${episodeTitle || ''}`.trim()); if (episodeTitle) { searchQueries.push(`${queryTitle} ${compactSE}`); } }
+        else { searchQueries.push(`${queryTitle} ${seasonEpisodeString} ${episodeTitle || ''}`.trim()); if (episodeTitle) { searchQueries.push(`${queryTitle} ${seasonEpisodeString}`); } }
 
         let allResults = []; const seenUrls = new Set();
         console.log(`[Log Step 2/5] Starting Google scraping for ${searchQueries.length} queries.`);
@@ -89,54 +89,17 @@ async function getStreamsForContent(type, id, config) {
         const videoDomains = ['youtube.com', 'dailymotion.com', 'vimeo.com', 'archive.org', 'facebook.com', 'ok.ru'];
 
         const calculateScore = (result) => {
-            const lowerTitle = result.title.toLowerCase();
-            const lowerQueryTitle = queryTitle.toLowerCase();
+            const lowerTitle = result.title.toLowerCase(); const lowerQueryTitle = queryTitle.toLowerCase();
             let scoreBreakdown = { title: 0, s_e: 0, duration: 0, whitelist: 0, durationDiff: null };
-
-            // Title Scoring
-            if (lowerTitle.includes(lowerQueryTitle)) { scoreBreakdown.title = 5; }
-            else { const queryWords = lowerQueryTitle.split(' '); const matchedWords = queryWords.filter(word => lowerTitle.includes(word)); scoreBreakdown.title = 5 * (matchedWords.length / queryWords.length); if (queryWords.length > 2 && matchedWords.length < queryWords.length - 1) scoreBreakdown.title -= 5; }
-            
-            // --- NEW: Granular Season/Episode Scoring ---
-            if (type === 'series') {
-                const s_num = parseInt(seasonNum, 10);
-                const ep_num = parseInt(episodeNum, 10);
-                const fullMatchRegex = new RegExp(`s0?${s_num}\\s*e0?${ep_num}|season\\s+0?${s_num}\\s+episode\\s+0?${ep_num}`, 'i');
-                const seasonMatchRegex = new RegExp(`season\\s+0?${s_num}|s0?${s_num}(?!e)`, 'i');
-                const episodeMatchRegex = new RegExp(`episode\\s+0?${ep_num}|e0?${ep_num}`, 'i');
-                
-                if (fullMatchRegex.test(lowerTitle)) {
-                    scoreBreakdown.s_e = 4; // Full match
-                } else {
-                    let partialScore = 0;
-                    if (seasonMatchRegex.test(lowerTitle)) partialScore += 2;
-                    if (episodeMatchRegex.test(lowerTitle)) partialScore += 2;
-                    scoreBreakdown.s_e = partialScore;
-                }
-            }
-
-            // Duration Scoring
-            if (apiRuntime > 0) {
-                const scrapedMinutes = parseDurationToMinutes(result.duration);
-                scoreBreakdown.durationDiff = scrapedMinutes ? Math.abs(scrapedMinutes - apiRuntime) : null;
-                if (scrapedMinutes) {
-                    const tolerance = type === 'movie' ? 20 : 3;
-                    if (scoreBreakdown.durationDiff <= tolerance) { scoreBreakdown.duration = 6 * (1 - (scoreBreakdown.durationDiff / tolerance)); }
-                    else { scoreBreakdown.duration = -10; }
-                }
-            }
-            
-            // Whitelist Bonus
+            if (lowerTitle.includes(lowerQueryTitle)) { scoreBreakdown.title = 5; } else { const queryWords = lowerQueryTitle.split(' '); const matchedWords = queryWords.filter(word => lowerTitle.includes(word)); scoreBreakdown.title = 5 * (matchedWords.length / queryWords.length); if (queryWords.length > 2 && matchedWords.length < queryWords.length - 1) scoreBreakdown.title -= 5; }
+            if (type === 'series') { const s_num = parseInt(seasonNum, 10); const ep_num = parseInt(episodeNum, 10); const fullMatchRegex = new RegExp(`s0?${s_num}\\s*e0?${ep_num}|season\\s+0?${s_num}\\s+episode\\s+0?${ep_num}`, 'i'); const seasonMatchRegex = new RegExp(`season\\s+0?${s_num}|s0?${s_num}(?!e)`, 'i'); const episodeMatchRegex = new RegExp(`episode\\s+0?${ep_num}|e0?${ep_num}`, 'i'); if (fullMatchRegex.test(lowerTitle)) { scoreBreakdown.s_e = 4; } else { let partialScore = 0; if (seasonMatchRegex.test(lowerTitle)) partialScore += 2; if (episodeMatchRegex.test(lowerTitle)) partialScore += 2; scoreBreakdown.s_e = partialScore; } }
+            if (apiRuntime > 0) { const scrapedMinutes = parseDurationToMinutes(result.duration); scoreBreakdown.durationDiff = scrapedMinutes ? Math.abs(scrapedMinutes - apiRuntime) : null; if (scrapedMinutes) { const tolerance = type === 'movie' ? 20 : 3; if (scoreBreakdown.durationDiff <= tolerance) { scoreBreakdown.duration = 6 * (1 - (scoreBreakdown.durationDiff / tolerance)); } else { scoreBreakdown.duration = -10; } } }
             if (videoDomains.some(domain => result.url.includes(domain))) { scoreBreakdown.whitelist = 1; }
-            
             const totalScore = scoreBreakdown.title + scoreBreakdown.s_e + scoreBreakdown.duration + scoreBreakdown.whitelist;
             return { score: totalScore, breakdown: scoreBreakdown };
         };
 
-        const scoredResults = allResults.map(res => {
-            const { score, breakdown } = calculateScore(res);
-            return { ...res, score, breakdown };
-        });
+        const scoredResults = allResults.map(res => { const { score, breakdown } = calculateScore(res); return { ...res, score, breakdown }; });
         scoredResults.sort((a, b) => b.score - a.score);
         
         console.log('[Log Step 4.5] Detailed scoring for top results:');
@@ -147,6 +110,7 @@ async function getStreamsForContent(type, id, config) {
             if (result.breakdown.durationDiff !== null) console.log(`[Log]   - Duration Difference: ${result.breakdown.durationDiff.toFixed(2)} mins`);
         });
 
+        // **THE FIX IS HERE: Refactored success/failure paths**
         let streams = [];
         if (scoredResults.length > 0 && scoredResults[0].score > 0) {
              const finalResults = scoredResults.slice(0, 2);
@@ -159,18 +123,20 @@ async function getStreamsForContent(type, id, config) {
                     behaviorHints: { externalUrl: true }
                 };
             });
+             // ONLY add the "See all" link on a successful scrape
+            streams.push({ title: `🔍 See all results on Google...`, externalUrl: `https://www.google.com/search?q=${encodeURIComponent(searchQueries[0])}&tbs=dur:l&tbm=vid`, behaviorHints: { externalUrl: true } });
+            return { streams };
         } else {
             console.warn('[Log Step 5/5] Failure. No results scored high enough.');
+            // This is now the only path to the final fallback
             throw new Error('No valid video results found after all scraping attempts and filtering.');
         }
-
-        streams.push({ title: `🔍 See all results on Google...`, externalUrl: `https://www.google.com/search?q=${encodeURIComponent(searchQueries[0])}&tbs=dur:l&tbm=vid`, behaviorHints: { externalUrl: true } });
-        return { streams };
 
     } catch (error) {
         console.error(`[Log] FINAL FALLBACK: ${error.message}. Reverting to simple search link.`);
         const fallbackQuery = type === 'movie' ? `${queryTitle} ${queryYear || ''} full movie` : `${queryTitle} ${seasonNum ? 'S'+seasonNum.toString().padStart(2, '0') : ''}${episodeNum ? 'E'+episodeNum.toString().padStart(2, '0') : ''}`;
         const googleSearchLink = `https://www.google.com/search?q=${encodeURIComponent(fallbackQuery)}&tbs=dur:l&tbm=vid`;
+        // Only return a single, clear fallback link
         return { streams: [{ title: `[Scraping Failed] 🔍 Google Search`, externalUrl: googleSearchLink, behaviorHints: { externalUrl: true } }] };
     }
 }
@@ -190,7 +156,11 @@ app.get('/:configString/stream/:type/:id.json', async (req, res) => {
   catch (error) { console.error('[Server Log] Stream handler error:', error); res.status(500).json({ err: 'Internal server error.' }); }
 });
 app.get('/', (req, res) => { res.redirect('/configure'); });
-app.get('/:configString?/configure', (req, res) => { res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Headers', '*'); res.sendFile(path.join(__dirname, 'public', 'configure.html')); });
+app.get('/:configString?/configure', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.sendFile(path.join(__dirname, 'public', 'configure.html'));
+});
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => { res.status(404).send('Not Found'); });
 const PORT = process.env.PORT || 7860;
