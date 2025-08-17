@@ -26,21 +26,15 @@ function parseConfigString(configString) {
     return { tmdbApiKey, omdbApiKey };
 }
 
-// NEW: Helper function to parse duration strings (e.g., "1:22:36" or "22:36") into minutes
+// Helper function to parse duration strings (e.g., "1:22:36" or "22:36") into minutes
 function parseDurationToMinutes(durationStr) {
-    if (!durationStr || typeof durationStr !== 'string') {
-        return null;
-    }
+    if (!durationStr || typeof durationStr !== 'string') return null;
     const parts = durationStr.split(':').map(Number);
     let minutes = 0;
-    if (parts.length === 3) { // HH:MM:SS
-        minutes = parts[0] * 60 + parts[1] + parts[2] / 60;
-    } else if (parts.length === 2) { // MM:SS
-        minutes = parts[0] + parts[1] / 60;
-    } else {
-        return null;
-    }
-    return minutes;
+    if (parts.length === 3) { minutes = parts[0] * 60 + parts[1] + parts[2] / 60; }
+    else if (parts.length === 2) { minutes = parts[0] + parts[1] / 60; }
+    else { return null; }
+    return isNaN(minutes) ? null : minutes;
 }
 
 // --- Main function for fetching metadata and streams ---
@@ -49,10 +43,10 @@ async function getStreamsForContent(type, id, config) {
     if (!tmdbApiKey) { return { streams: [], error: 'TMDb API key is required.' }; }
 
     let IMDB_ID = null, TMDB_ID = null, queryTitle = '', queryYear = '', seasonNum, episodeNum, episodeTitle = '';
-    let apiRuntime = null; // NEW: Variable to store the official runtime in minutes
+    let apiRuntime = null;
 
     try {
-        // --- (This is your existing, robust metadata fetching logic) ---
+        // --- (Metadata fetching logic - no changes needed here) ---
         let rawContentId = id;
         if (type === 'series') {
             const parts = id.split(':');
@@ -91,7 +85,7 @@ async function getStreamsForContent(type, id, config) {
                 const directTmdbResponse = await axios.get(directTmdbUrl);
                 queryTitle = type === 'movie' ? directTmdbResponse.data.title : directTmdbResponse.data.name;
                 queryYear = type === 'movie' ? (new Date(directTmdbResponse.data.release_date)).getFullYear() : (new Date(directTmdbResponse.data.first_air_date)).getFullYear();
-                if (type === 'movie' && directTmdbResponse.data.runtime) { apiRuntime = directTmdbResponse.data.runtime; } // Get movie runtime
+                if (type === 'movie' && directTmdbResponse.data.runtime) { apiRuntime = directTmdbResponse.data.runtime; }
                 if (!IMDB_ID && directTmdbResponse.data.external_ids && directTmdbResponse.data.external_ids.imdb_id) { IMDB_ID = directTmdbResponse.data.external_ids.imdb_id; }
             } catch (tmdbIdError) { console.warn(`[Addon Log] Direct TMDb lookup failed for TMDB ID ${TMDB_ID}: ${tmdbIdError.message}`); }
         }
@@ -103,13 +97,13 @@ async function getStreamsForContent(type, id, config) {
                 if (omdbResponse.data.Response === 'True') {
                     queryTitle = omdbResponse.data.Title;
                     queryYear = omdbResponse.data.Year ? parseInt(omdbResponse.data.Year.substring(0,4)) : '';
-                    if (omdbResponse.data.Runtime && omdbResponse.data.Runtime !== "N/A") { apiRuntime = parseInt(omdbResponse.data.Runtime); } // Get runtime from OMDb
+                    if (omdbResponse.data.Runtime && omdbResponse.data.Runtime !== "N/A") { apiRuntime = parseInt(omdbResponse.data.Runtime); }
                 }
             } catch (omdbError) { console.error(`[Addon Log] OMDb API error for IMDb ID ${IMDB_ID}: ${omdbError.message}`); }
         }
-
+        
         if (queryTitle && !TMDB_ID) {
-             try {
+            try {
                 const searchYear = queryYear ? queryYear.toString().substring(0, 4) : '';
                 const searchUrl = `https://api.themoviedb.org/3/search/${type === 'movie' ? 'movie' : 'tv'}?api_key=${tmdbApiKey}&query=${encodeURIComponent(queryTitle)}&first_air_date_year=${searchYear}`;
                 const searchResponse = await axios.get(searchUrl);
@@ -119,15 +113,15 @@ async function getStreamsForContent(type, id, config) {
                 }
             } catch (searchError) { console.warn(`[Addon Log] TMDb search fallback failed: ${searchError.message}`); }
         }
-
+        
         if (!queryTitle) { throw new Error('Failed to retrieve title.'); }
-
+        
         if (type === 'series' && TMDB_ID) {
             try {
                 const epUrl = `https://api.themoviedb.org/3/tv/${TMDB_ID}/season/${seasonNum}/episode/${episodeNum}?api_key=${tmdbApiKey}`;
                 const episodeResponse = await axios.get(epUrl);
                 episodeTitle = episodeResponse.data.name;
-                if (episodeResponse.data.runtime) { apiRuntime = episodeResponse.data.runtime; } // Get episode runtime
+                if (episodeResponse.data.runtime) { apiRuntime = episodeResponse.data.runtime; }
             } catch (e) { /* Optional */ }
         }
         if (!episodeTitle && type === 'series' && IMDB_ID && omdbApiKey) {
@@ -136,14 +130,14 @@ async function getStreamsForContent(type, id, config) {
                 const omdbEpRes = await axios.get(omdbEpUrl);
                 if (omdbEpRes.data && omdbEpRes.data.Response === 'True') { 
                     episodeTitle = omdbEpRes.data.Title;
-                    if (omdbEpRes.data.Runtime && omdbEpRes.data.Runtime !== "N/A") { apiRuntime = parseInt(omdbEpRes.data.Runtime); } // Get episode runtime from OMDb
+                    if (omdbEpRes.data.Runtime && omdbEpRes.data.Runtime !== "N/A") { apiRuntime = parseInt(omdbEpRes.data.Runtime); }
                 }
             } catch (e) { /* Optional */ }
         }
         
         if (apiRuntime) { console.log(`[Addon Log] Official runtime from API: ${apiRuntime} minutes.`); }
 
-        // --- UPGRADED SCRAPING & FILTERING LOGIC ---
+        // --- HYBRID SCRAPING LOGIC ---
         let googleSearchQuery;
         if (type === 'movie') { googleSearchQuery = `${queryTitle} ${queryYear || ''} full movie`; }
         else { const pS = seasonNum.toString().padStart(2, '0'); const pE = episodeNum.toString().padStart(2, '0'); googleSearchQuery = `${queryTitle} S${pS} E${pE} ${episodeTitle || ''}`.trim(); }
@@ -159,25 +153,45 @@ async function getStreamsForContent(type, id, config) {
             const $ = cheerio.load(html);
             let results = [];
             const seenUrls = new Set();
-            const videoDomains = ['youtube.com', 'dailymotion.com', 'vimeo.com', 'archive.org', 'vk.com', 'ok.ru'];
-
-            $('a').each((i, el) => {
-                if (results.length >= 10) return false; // Scrape a few more to allow for filtering
-                let url = $(el).attr('href');
+            
+            // --- ATTEMPT A: Structured Scraping (High Quality) ---
+            console.log('[Addon Log] Attempting primary scraping strategy (structured).');
+            $('div.vt6azd, div.MjjYud').each((i, el) => {
+                const linkEl = $(el).find('a');
+                let url = linkEl.attr('href');
                 if (url && url.startsWith('/url?q=')) { url = new URLSearchParams(url.split('?')[1]).get('q'); }
-                if (!url || !url.startsWith('http') || seenUrls.has(url) || !videoDomains.some(d => url.includes(d))) return;
-                const resultBlock = $(el).closest('div.vt6azd, div.MjjYud');
-                if (resultBlock.length > 0) {
-                    const title = resultBlock.find('h3.LC20lb').text();
-                    const source = resultBlock.find('cite').first().text().split(' › ')[0].replace('www.', '');
-                    const duration = resultBlock.find('.c8rnLc span, .O1CVkc').text();
-                    if (title) { results.push({ title, url, source, duration }); seenUrls.add(url); }
+                if (url && url.startsWith('http') && !seenUrls.has(url)) {
+                    const title = $(el).find('h3.LC20lb').text();
+                    const source = $(el).find('cite').first().text().split(' › ')[0].replace('www.', '');
+                    const duration = $(el).find('.c8rnLc span, .O1CVkc').text();
+                    if(title) {
+                        results.push({ title, url, source, duration });
+                        seenUrls.add(url);
+                    }
                 }
             });
 
-            // NEW: Filter results by duration
+            // --- ATTEMPT B: Link-based Fallback Scraping (More Resilient) ---
+            if (results.length === 0) {
+                console.warn('[Addon Log] Primary strategy failed. Attempting fallback link search.');
+                const videoDomains = ['youtube.com', 'dailymotion.com', 'vimeo.com', 'archive.org', 'vk.com']; // Whitelist for fallback
+                $('a').each((i, el) => {
+                    let url = $(el).attr('href');
+                    if (url && url.startsWith('/url?q=')) { url = new URLSearchParams(url.split('?')[1]).get('q'); }
+                    if (!url || !url.startsWith('http') || seenUrls.has(url)) return;
+                    if (videoDomains.some(domain => url.includes(domain))) {
+                        let title = ($(el).find('h3').text() || $(el).text()).trim();
+                        if (title) {
+                            results.push({ title, url, source: new URL(url).hostname.replace('www.', ''), duration: '' });
+                            seenUrls.add(url);
+                        }
+                    }
+                });
+            }
+
+            // --- Filtering and Processing ---
             if (apiRuntime > 0) {
-                const tolerance = type === 'movie' ? 20 : 3; // 20 mins for movies, 3 for episodes
+                const tolerance = type === 'movie' ? 20 : 3;
                 const originalCount = results.length;
                 results = results.filter(res => {
                     const scrapedMinutes = parseDurationToMinutes(res.duration);
@@ -187,9 +201,8 @@ async function getStreamsForContent(type, id, config) {
                 console.log(`[Addon Log] Filtered by duration: ${originalCount} -> ${results.length} results.`);
             }
 
-            if (results.length === 0) { throw new Error('Parsing failed or no results matched duration filter.'); }
+            if (results.length === 0) { throw new Error('No valid video results found after all scraping attempts and filtering.'); }
             
-            // Limit to top 5 after filtering
             results.slice(0, 5).forEach(res => {
                 streams.push({
                     title: `[${res.source || 'Stream'}] ${res.title}\n${res.duration ? `Duration: ${res.duration}` : ''}`,
@@ -199,8 +212,8 @@ async function getStreamsForContent(type, id, config) {
             });
 
         } catch (error) {
-            console.error(`[Addon Log] Scraping/Filtering failed: ${error.message}. Reverting to simple search links.`);
-            if (html) { console.error('[Addon Log] Full HTML of failed page received from Google. Check for CAPTCHA or layout changes.'); }
+            console.error(`[Addon Log] FINAL FALLBACK: ${error.message}. Reverting to simple search link.`);
+            if (html) { console.error('[Addon Log] HTML of failed page received. Check for CAPTCHA or layout changes.'); }
             streams.push({ title: `[Scraping Failed] 🔍 Google Search`, externalUrl: googleSearchLink, behaviorHints: { externalUrl: true } });
         }
 
@@ -217,7 +230,7 @@ async function getStreamsForContent(type, id, config) {
 }
 
 
-// --- (The rest of the file is for the server and remains unchanged) ---
+// --- (Server routes - no changes needed here) ---
 app.get('/:configString/manifest.json', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
