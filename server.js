@@ -174,7 +174,7 @@ async function getStreamsForContent(type, id, config) {
             // --- ATTEMPT B: Link-based Fallback Scraping (More Resilient) ---
             if (results.length === 0) {
                 console.warn('[Addon Log] Primary strategy failed. Attempting fallback link search.');
-                const videoDomains = ['youtube.com', 'dailymotion.com', 'vimeo.com', 'archive.org', 'vk.com']; // Whitelist for fallback
+                const videoDomains = ['youtube.com', 'dailymotion.com', 'vimeo.com', 'archive.org', 'vk.com', 'ok.ru']; // Whitelist for fallback
                 $('a').each((i, el) => {
                     let url = $(el).attr('href');
                     if (url && url.startsWith('/url?q=')) { url = new URLSearchParams(url.split('?')[1]).get('q'); }
