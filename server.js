@@ -41,6 +41,7 @@ async function getStreamsForContent(type, id, config) {
 
     let IMDB_ID = null, TMDB_ID = null, queryTitle = '', queryYear = '', seasonNum, episodeNum, episodeTitle = '';
     let apiRuntime = null;
+    let streams = []; // Define streams at the top level
 
     try {
         console.log('[Log Step 1/5] Starting metadata enrichment...');
@@ -63,10 +64,9 @@ async function getStreamsForContent(type, id, config) {
         const paddedSeason = type === 'series' ? seasonNum.toString().padStart(2, '0') : '';
         const paddedEpisode = type === 'series' ? episodeNum.toString().padStart(2, '0') : '';
         const compactSE = type === 'series' ? `S${paddedSeason}E${paddedEpisode}` : '';
-        const spacedSE = type === 'series' ? `S${paddedSeason} E${paddedEpisode}` : ''; // For Google links
 
         if (type === 'movie') { searchQueries.push(`${queryTitle} ${queryYear || ''} full movie`); }
-        else { searchQueries.push(`${queryTitle} ${spacedSE} ${episodeTitle || ''}`.trim()); if (episodeTitle) { searchQueries.push(`${queryTitle} ${spacedSE}`); } }
+        else { searchQueries.push(`${queryTitle} ${compactSE} ${episodeTitle || ''}`.trim()); if (episodeTitle) { searchQueries.push(`${queryTitle} ${compactSE}`); } }
 
         let allResults = []; const seenUrls = new Set();
         console.log(`[Log Step 2/5] Starting Google scraping for ${searchQueries.length} queries.`);
@@ -111,7 +111,6 @@ async function getStreamsForContent(type, id, config) {
             if (result.breakdown.durationDiff !== null) console.log(`[Log]   - Duration Difference: ${result.breakdown.durationDiff.toFixed(2)} mins`);
         });
 
-        let streams = [];
         if (scoredResults.length > 0 && scoredResults[0].score > 0) {
              const finalResults = scoredResults.slice(0, 2);
              console.log(`[Log Step 5/5] Success. Returning ${finalResults.length} best streams.`);
@@ -119,21 +118,6 @@ async function getStreamsForContent(type, id, config) {
                 let cleanTitle = res.title.replace(/ - video Dailymotion/i, '').replace(/\| YouTube/i, '').replace(/- YouTube/i, '').replace(/\| Facebook/i, '').trim().replace(/[\s\-,|]+$/, '');
                 return { title: `[${res.source || 'Stream'}] ${cleanTitle}\n${res.duration ? `Duration: ${res.duration}` : ''}`, externalUrl: res.url, behaviorHints: { externalUrl: true } };
             });
-             // **THE FIX IS HERE:** Add correctly formatted and labeled "See all" links at the end
-            if (type === 'series') {
-                const genericQuery = `${queryTitle} ${spacedSE}`;
-                const genericSearchLink = `https://www.google.com/search?q=${encodeURIComponent(genericQuery)}&tbs=dur:l&tbm=vid`;
-                streams.push({ title: `🔍 No Title: See all on Google`, externalUrl: genericSearchLink, behaviorHints: { externalUrl: true } });
-                if (episodeTitle) {
-                    const specificQuery = `${queryTitle} ${spacedSE} ${episodeTitle}`;
-                    const specificSearchLink = `https://www.google.com/search?q=${encodeURIComponent(specificQuery)}&tbs=dur:l&tbm=vid`;
-                    streams.push({ title: `🔍 With Title: See all on Google`, externalUrl: specificSearchLink, behaviorHints: { externalUrl: true } });
-                }
-            } else { // For Movies
-                const googleSearchLink = `https://www.google.com/search?q=${encodeURIComponent(searchQueries[0])}&tbs=dur:l&tbm=vid`;
-                streams.push({ title: `🔍 See all results on Google...`, externalUrl: googleSearchLink, behaviorHints: { externalUrl: true } });
-            }
-            return { streams };
         } else {
             console.warn('[Log Step 5/5] Failure. No results scored high enough.');
             throw new Error('No valid video results found after all scraping attempts and filtering.');
@@ -141,25 +125,33 @@ async function getStreamsForContent(type, id, config) {
 
     } catch (error) {
         console.error(`[Log] FINAL FALLBACK: ${error.message}.`);
-        const fallbackStreams = [];
-        if (type === 'movie') {
-            const fallbackQuery = `${queryTitle} ${queryYear || ''} full movie`;
-            const googleSearchLink = `https://www.google.com/search?q=${encodeURIComponent(fallbackQuery)}&tbs=dur:l&tbm=vid`;
-            fallbackStreams.push({ title: `[Scraping Failed] 🔍 Google Search`, externalUrl: googleSearchLink, behaviorHints: { externalUrl: true } });
-        } else { // Series fallback
-            const spacedSE = `S${seasonNum.toString().padStart(2, '0')} E${episodeNum.toString().padStart(2, '0')}`;
-            const genericQuery = `${queryTitle} ${spacedSE}`;
-            const genericSearchLink = `https://www.google.com/search?q=${encodeURIComponent(genericQuery)}&tbs=dur:l&tbm=vid`;
-            fallbackStreams.push({ title: `[Scraping Failed] 🔍 No Title: Google Search`, externalUrl: genericSearchLink, behaviorHints: { externalUrl: true } });
-            if (episodeTitle) {
-                const specificQuery = `${queryTitle} ${spacedSE} ${episodeTitle}`;
-                const specificSearchLink = `https://www.google.com/search?q=${encodeURIComponent(specificQuery)}&tbs=dur:l&tbm=vid`;
-                fallbackStreams.push({ title: `[Scraping Failed] 🔍 With Title: Google Search`, externalUrl: specificSearchLink, behaviorHints: { externalUrl: true } });
-            }
-        }
-        return { streams: fallbackStreams };
+        streams.push({ title: `[Scraping Failed] 🔍 Google Search`, externalUrl: `https://www.google.com/search?q=${encodeURIComponent(searchQueries[0])}&tbs=dur:l&tbm=vid`, behaviorHints: { externalUrl: true } });
     }
+
+    // --- **THE FIX IS HERE**: Final link assembly is now outside the try/catch, ensuring it always runs ---
+    if (type === 'series') {
+        const spacedSE = `S${seasonNum.toString().padStart(2, '0')} E${episodeNum.toString().padStart(2, '0')}`;
+        const genericQuery = `${queryTitle} ${spacedSE}`;
+        const genericSearchLink = `https://www.google.com/search?q=${encodeURIComponent(genericQuery)}&tbs=dur:l&tbm=vid`;
+        
+        // Add "No Title" search link first
+        streams.push({ title: `🔍 No Title: See all on Google`, externalUrl: genericSearchLink, behaviorHints: { externalUrl: true } });
+
+        // Add "With Title" search link if an episode title exists
+        if (episodeTitle) {
+            const specificQuery = `${queryTitle} ${spacedSE} ${episodeTitle}`;
+            const specificSearchLink = `https://www.google.com/search?q=${encodeURIComponent(specificQuery)}&tbs=dur:l&tbm=vid`;
+            streams.push({ title: `🔍 With Title: See all on Google`, externalUrl: specificSearchLink, behaviorHints: { externalUrl: true } });
+        }
+    } else if (type === 'movie') {
+        const movieQuery = `${queryTitle} ${queryYear || ''} full movie`;
+        const googleSearchLink = `https://www.google.com/search?q=${encodeURIComponent(movieQuery)}&tbs=dur:l&tbm=vid`;
+        streams.push({ title: `🔍 See all results on Google...`, externalUrl: googleSearchLink, behaviorHints: { externalUrl: true } });
+    }
+
+    return { streams };
 }
+
 
 // --- (Server routes - no changes needed here) ---
 app.get('/:configString/manifest.json', (req, res) => {
