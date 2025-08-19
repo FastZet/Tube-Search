@@ -5,8 +5,14 @@ const apiService = require('./api-service');
 const scraperService = require('./scraper-service');
 const scoringService = require('./scoring-service');
 
+/**
+ * Orchestrates the process of fetching metadata, scraping, and scoring to find streams.
+ * @param {string} type - The content type ('movie' or 'series').
+ * @param {string} id - The Stremio ID for the content.
+ * @param {object} apiKeys - The user's API keys { tmdbApiKey, omdbApiKey }.
+ * @returns {Promise<{streams: Array}>} A promise that resolves to an object containing an array of stream objects.
+ */
 const getStreams = async (type, id, apiKeys) => {
-    // ... function header and initial block unchanged ...
     const start = Date.now();
     if (!type || !id || !apiKeys?.tmdbApiKey) {
         throw new Error('[HANDLER] Invalid arguments: type, id, and tmdbApiKey are required.');
@@ -42,10 +48,8 @@ const getStreams = async (type, id, apiKeys) => {
         searchQueries.forEach((q, i) => console.log(`  ${i + 1}: ${q}`));
 
         console.log('[HANDLER] Step 3/5: Scraping Google for stream candidates...');
-        // MODIFIED: Destructure the new return object
         const { allResults: scrapedResults, queryStats } = await scraperService.scrapeGoogleForStreams(searchQueries);
         
-        // ADDED: Detailed query stats logging
         console.log(`[HANDLER] Step 3.1: Found ${scrapedResults.length} unique results.`);
         queryStats.forEach(stat => {
             console.log(`  - Query "${stat.query}" returned ${stat.count} results.`);
@@ -53,7 +57,6 @@ const getStreams = async (type, id, apiKeys) => {
 
         if (config.logging.enableDetailedScoring) {
             console.log('[HANDLER] Step 3.2: Full list of found titles:');
-            // MODIFIED: No truncation
             scrapedResults.forEach((res, i) => console.log(`  ${i + 1}: ${res.title}`));
         }
         
@@ -65,9 +68,9 @@ const getStreams = async (type, id, apiKeys) => {
             }))
             .sort((a, b) => b.scoreData.score - a.scoreData.score);
         
-        // MODIFIED: Select top 3 results
-        const topResults = scoredResults.length > 0 && scoredResults[0].scoreData.score > 0
-            ? scoredResults.slice(0, 3)
+        // MODIFIED: Selecting the top 2 results as requested
+        const topResults = (scoredResults.length > 0 && scoredResults[0].scoreData.score > 0)
+            ? scoredResults.slice(0, 2)
             : [];
         
         if (config.logging.enableDetailedScoring) {
@@ -80,7 +83,6 @@ const getStreams = async (type, id, apiKeys) => {
             });
         }
         
-        // MODIFIED: Moved this log to the end of the scoring step
         if (topResults.length > 0) {
             console.log(`[HANDLER] Step 4.2: Final Selection: ${topResults.length} best streams selected.`);
         }
@@ -103,7 +105,7 @@ const getStreams = async (type, id, apiKeys) => {
 };
 
 // --- Private Helper Functions ---
-// ... functions _formatBreakdownForLog, _buildSearchQueries, _formatStream, _getFallbackStreams are unchanged ...
+
 const _formatBreakdownForLog = (breakdown) => {
     const formatted = {};
     for (const key in breakdown) {
