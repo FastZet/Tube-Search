@@ -1,6 +1,6 @@
 {
   "id": "community.tubesearch.addon",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "name": "Tube Search",
   "description": "Finds video streams from multiple platforms (YouTube, Dailymotion, Vimeo, Archive.org) for movies and TV shows. Uses intelligent scraping and scoring to find the best matches. Requires TMDb and OMDb API keys.",
   "resources": ["stream"],
