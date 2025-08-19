@@ -52,7 +52,7 @@ async function getStreamsForContent(type, id, config) {
         if (TMDB_ID && isNaN(TMDB_ID) && TMDB_ID.includes(':')) { TMDB_ID = TMDB_ID.split(':')[1]; } else if (TMDB_ID && isNaN(TMDB_ID) && !TMDB_ID.startsWith('tt')) { TMDB_ID = null; }
         if (IMDB_ID) { try { const res = await axios.get(`https://api.themoviedb.org/3/find/${IMDB_ID}?api_key=${tmdbApiKey}&external_source=imdb_id`); if (type === 'movie' && res.data.movie_results.length > 0) { TMDB_ID = res.data.movie_results[0].id; queryTitle = res.data.movie_results[0].title; queryYear = new Date(res.data.movie_results[0].release_date).getFullYear(); } else if (type === 'series' && res.data.tv_results.length > 0) { TMDB_ID = res.data.tv_results[0].id; queryTitle = res.data.tv_results[0].name; queryYear = new Date(res.data.tv_results[0].first_air_date).getFullYear(); } } catch (e) { console.warn(`[Log] TMDb Find error: ${e.message}.`); } }
         if (TMDB_ID && !queryTitle) { try { const url = (type === 'movie') ? `https://api.themoviedb.org/3/movie/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids` : `https://api.themoviedb.org/3/tv/${TMDB_ID}?api_key=${tmdbApiKey}&append_to_response=external_ids`; const res = await axios.get(url); queryTitle = type === 'movie' ? res.data.title : res.data.name; queryYear = type === 'movie' ? new Date(res.data.release_date).getFullYear() : new Date(res.data.first_air_date).getFullYear(); if (type === 'movie' && res.data.runtime) apiRuntime = res.data.runtime; if (!IMDB_ID && res.data.external_ids?.imdb_id) IMDB_ID = res.data.external_ids.imdb_id; } catch (e) { console.warn(`[Log] Direct TMDb lookup failed: ${e.message}`); } }
-        if (!queryTitle && IMDB_ID && omdbApiKey) { try { const res = await axios.get(`http://www.omdbapi.com/?apikey=${omdbApiKey}&i=${IMDB_ID}&plot=short&r=json`); if (res.data.Response === 'True') { queryTitle = res.data.Title; queryYear = res.data.Year ? parseInt(res.data.Year.substring(0,4)) : ''; if (res.data.Runtime !== "N/A") apiRuntime = parseInt(res.data.Runtime); } } catch (e) { console.error(`[Log] OMDb API error: ${e.message}`); } }
+        if (!queryTitle && IMDB_ID && omdbApiKey) { try { const res = await axios.get(`http://www.omdbapi.com/?apikey=${omdbApiKey}&i=${IMDB_ID}&plot=short&r=json`); if (res.data.Response === 'True') { queryTitle = res.data.Title; queryYear = res.data.Year ? parseInt(res.data.Year.substring(0, 4)) : ''; if (res.data.Runtime !== "N/A") apiRuntime = parseInt(res.data.Runtime); } } catch (e) { console.error(`[Log] OMDb API error: ${e.message}`); } }
         if (queryTitle && !TMDB_ID) { try { const url = `https://api.themoviedb.org/3/search/${type === 'movie' ? 'movie' : 'tv'}?api_key=${tmdbApiKey}&query=${encodeURIComponent(queryTitle)}&first_air_date_year=${queryYear ? queryYear.toString().substring(0, 4) : ''}`; const res = await axios.get(url); if (res.data?.results.length > 0) TMDB_ID = (res.data.results.find(r => (r.name || r.title) === queryTitle) || res.data.results[0]).id; } catch (e) { console.warn(`[Log] TMDb search fallback failed: ${e.message}`); } }
         if (!queryTitle) { throw new Error('Failed to retrieve title.'); }
         if (type === 'series' && TMDB_ID) { try { const res = await axios.get(`https://api.themoviedb.org/3/tv/${TMDB_ID}/season/${seasonNum}/episode/${episodeNum}?api_key=${tmdbApiKey}`); episodeTitle = res.data.name; if (res.data.runtime) apiRuntime = res.data.runtime; } catch (e) { /* Optional */ } }
@@ -61,14 +61,24 @@ async function getStreamsForContent(type, id, config) {
         
         // --- HYBRID SCRAPING & SCORING LOGIC ---
         const searchQueries = [];
-        const paddedSeason = type === 'series' ? seasonNum.toString().padStart(2, '0') : '';
-        const paddedEpisode = type === 'series' ? episodeNum.toString().padStart(2, '0') : '';
-        const compactSE = type === 'series' ? `S${paddedSeason}E${paddedEpisode}` : '';
+        if (type === 'movie') {
+            searchQueries.push(`${queryTitle} ${queryYear || ''} full movie`);
+        } else if (type === 'series') {
+            const paddedSeason = seasonNum.toString().padStart(2, '0');
+            const paddedEpisode = episodeNum.toString().padStart(2, '0');
+            const compactSE = `S${paddedSeason}E${paddedEpisode}`;
 
-        if (type === 'movie') { searchQueries.push(`${queryTitle} ${queryYear || ''} full movie`); }
-        else { searchQueries.push(`${queryTitle} ${compactSE} ${episodeTitle || ''}`.trim()); if (episodeTitle) { searchQueries.push(`${queryTitle} ${compactSE}`); } }
+            // Main query with Season/Episode number
+            searchQueries.push(`${queryTitle} ${compactSE}`);
+            
+            // Add a second, more specific query if we have an episode title
+            if (episodeTitle) {
+                searchQueries.push(`${queryTitle} ${compactSE} ${episodeTitle}`);
+            }
+        }
 
-        let allResults = []; const seenUrls = new Set();
+        let allResults = []; 
+        const seenUrls = new Set();
         console.log(`[Log Step 2/5] Starting Google scraping for ${searchQueries.length} queries.`);
         for (const query of searchQueries) {
             try {
@@ -76,10 +86,19 @@ async function getStreamsForContent(type, id, config) {
                 const response = await axios.get(googleSearchLink, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36' } });
                 const $ = cheerio.load(response.data);
                 $('div.vt6azd').each((i, el) => {
-                    const linkEl = $(el).find('a').first(); let url = linkEl.attr('href'); if (url && url.startsWith('/url?q=')) { url = new URLSearchParams(url.split('?')[1]).get('q'); }
+                    const linkEl = $(el).find('a').first(); 
+                    let url = linkEl.attr('href'); 
+                    if (url && url.startsWith('/url?q=')) { 
+                        url = new URLSearchParams(url.split('?')[1]).get('q'); 
+                    }
                     if (url && url.startsWith('http') && !seenUrls.has(url)) {
-                        const title = $(el).find('h3.LC20lb').first().text(); const source = $(el).find('cite').first().text().split(' › ')[0].replace('www.', ''); const duration = $(el).find('.c8rnLc span, .O1CVkc').first().text();
-                        if(title) { allResults.push({ title, url, source, duration }); seenUrls.add(url); }
+                        const title = $(el).find('h3.LC20lb').first().text(); 
+                        const source = $(el).find('cite').first().text().split(' › ')[0].replace('www.', ''); 
+                        const duration = $(el).find('.c8rnLc span, .O1CVkc').first().text();
+                        if(title) { 
+                            allResults.push({ title, url, source, duration, index: i }); 
+                            seenUrls.add(url); 
+                        }
                     }
                 });
             } catch (error) { console.error(`[Log] Failed to scrape query "${query}": ${error.message}`); }
@@ -92,55 +111,66 @@ async function getStreamsForContent(type, id, config) {
         const calculateScore = (result) => {
             const lowerTitle = result.title.toLowerCase();
             const lowerQueryTitle = queryTitle.toLowerCase();
-            let scoreBreakdown = { title: 0, episode: 0, season: 0, duration: 0, whitelist: 0, durationDiff: null };
+            const lowerEpisodeTitle = episodeTitle ? episodeTitle.toLowerCase() : '';
+            
+            let scoreBreakdown = { title: 0, episodeNum: 0, episodeTitle: 0, season: 0, duration: 0, whitelist: 0, googleRank: 0, durationDiff: null };
 
-            // 1. Title Score (Max 6 points) - Increased reward for full match
+            // 1. Google Rank Bonus (Max 5 points) - Highest score for the top result
+            scoreBreakdown.googleRank = Math.max(0, 5 - result.index);
+
+            // 2. Title Match (Max 6 points) - Strong score for matching series name
             if (lowerTitle.includes(lowerQueryTitle)) {
-                scoreBreakdown.title = 6; // Increased from 5
+                scoreBreakdown.title = 6;
             } else {
                 const queryWords = lowerQueryTitle.split(' ');
                 const matchedWords = queryWords.filter(word => lowerTitle.includes(word));
-                scoreBreakdown.title = 6 * (matchedWords.length / queryWords.length); // Adjusted max score
+                scoreBreakdown.title = 6 * (matchedWords.length / queryWords.length);
                 if (queryWords.length > 2 && matchedWords.length < queryWords.length - 1) scoreBreakdown.title -= 5;
             }
 
-            // 2. Episode & Season Score (Decoupled for flexibility)
+            // 3. Episode & Season Score (for series only)
             if (type === 'series') {
-                const s_num = parseInt(seasonNum, 10);
                 const ep_num = parseInt(episodeNum, 10);
-                const episodeMatchRegex = new RegExp(`episode\\s+0?${ep_num}|e0?${ep_num}`, 'i');
-                const seasonMatchRegex = new RegExp(`season\\s+0?${s_num}|s0?${s_num}`, 'i');
-
-                // Episode match is critical (Max 5 points)
-                if (episodeMatchRegex.test(lowerTitle)) {
-                    scoreBreakdown.episode = 5;
+                const episodeNumRegex = new RegExp(`episode\\s+0?${ep_num}|e0?${ep_num}`, 'i');
+                
+                // Episode Number Match (Max 5 points) - High value
+                if (episodeNumRegex.test(lowerTitle)) {
+                    scoreBreakdown.episodeNum = 5;
                 }
-                // Season match is a bonus (Max 2 points)
+
+                // Episode Title Match (Max 5 points) - Equally high value
+                if (lowerEpisodeTitle && lowerTitle.includes(lowerEpisodeTitle)) {
+                    scoreBreakdown.episodeTitle = 5;
+                }
+                
+                // Season Match (Bonus 2 points)
+                const s_num = parseInt(seasonNum, 10);
+                const seasonMatchRegex = new RegExp(`season\\s+0?${s_num}|s0?${s_num}`, 'i');
                 if (seasonMatchRegex.test(lowerTitle)) {
                     scoreBreakdown.season = 2;
                 }
             }
 
-            // 3. Duration Score (Max 6 points, -10 penalty) - Unchanged
+            // 4. Duration Match (Max 6 points, -10 penalty)
             if (apiRuntime > 0) {
                 const scrapedMinutes = parseDurationToMinutes(result.duration);
                 scoreBreakdown.durationDiff = scrapedMinutes ? Math.abs(scrapedMinutes - apiRuntime) : null;
                 if (scrapedMinutes) {
-                    const tolerance = type === 'movie' ? 20 : 3;
+                    const tolerance = type === 'movie' ? 20 : 3; // 3 min tolerance for episodes
                     if (scoreBreakdown.durationDiff <= tolerance) {
                         scoreBreakdown.duration = 6 * (1 - (scoreBreakdown.durationDiff / tolerance));
                     } else {
-                        scoreBreakdown.duration = -10;
+                        scoreBreakdown.duration = -10; // Heavy penalty for mismatch
                     }
                 }
             }
             
-            // 4. Whitelist Bonus (1 point) - Unchanged
+            // 5. Whitelist Bonus (1 point)
             if (videoDomains.some(domain => result.url.includes(domain))) {
                 scoreBreakdown.whitelist = 1;
             }
 
-            const totalScore = scoreBreakdown.title + scoreBreakdown.episode + scoreBreakdown.season + scoreBreakdown.duration + scoreBreakdown.whitelist;
+            const totalScore = Object.values(scoreBreakdown).reduce((acc, val) => acc + (typeof val === 'number' ? val : 0), 0);
             return { score: totalScore, breakdown: scoreBreakdown };
         };
 
@@ -151,13 +181,13 @@ async function getStreamsForContent(type, id, config) {
         scoredResults.slice(0, 5).forEach((result, index) => {
             console.log(`[Log] --- Result ${index + 1}: "${result.title}" ---`);
             console.log(`[Log]   - Final Score: ${result.score.toFixed(2)}`);
-            console.log(`[Log]   - Breakdown: Title Match(${result.breakdown.title.toFixed(2)}), S/E Match(${result.breakdown.s_e.toFixed(2)}), Duration Match(${result.breakdown.duration.toFixed(2)}), Whitelist Bonus(${result.breakdown.whitelist.toFixed(2)})`);
+            console.log(`[Log]   - Breakdown: Title(${result.breakdown.title.toFixed(2)}), EpNum(${result.breakdown.episodeNum.toFixed(2)}), EpTitle(${result.breakdown.episodeTitle.toFixed(2)}), Season(${result.breakdown.season.toFixed(2)}), Duration(${result.breakdown.duration.toFixed(2)}), Whitelist(${result.breakdown.whitelist.toFixed(2)}), GoogleRank(${result.breakdown.googleRank.toFixed(2)})`);
             if (result.breakdown.durationDiff !== null) console.log(`[Log]   - Duration Difference: ${result.breakdown.durationDiff.toFixed(2)} mins`);
         });
 
         if (scoredResults.length > 0 && scoredResults[0].score > 0) {
              const finalResults = scoredResults.slice(0, 1);
-             console.log(`[Log Step 5/5] Success. Returning ${finalResults.length} best streams.`);
+             console.log(`[Log Step 5/5] Success. Returning ${finalResults.length} best stream.`);
              streams = finalResults.map(res => {
                 let cleanTitle = res.title.replace(/ - video Dailymotion/i, '').replace(/\| YouTube/i, '').replace(/- YouTube/i, '').replace(/\| Facebook/i, '').trim().replace(/[\s\-,|]+$/, '');
                 return { title: `[${res.source || 'Stream'}] ${cleanTitle}\n${res.duration ? `Duration: ${res.duration}` : ''}`, externalUrl: res.url, behaviorHints: { externalUrl: true } };
@@ -172,16 +202,14 @@ async function getStreamsForContent(type, id, config) {
         streams.push({ title: `[Scraping Failed] 🔍 Google Search`, externalUrl: `https://www.google.com/search?q=${encodeURIComponent(searchQueries[0])}&tbs=dur:l&tbm=vid`, behaviorHints: { externalUrl: true } });
     }
 
-    // --- **THE FIX IS HERE**: Final link assembly is now outside the try/catch, ensuring it always runs ---
+    // --- Final link assembly is now outside the try/catch, ensuring it always runs ---
     if (type === 'series') {
         const spacedSE = `S${seasonNum.toString().padStart(2, '0')} E${episodeNum.toString().padStart(2, '0')}`;
         const genericQuery = `${queryTitle} ${spacedSE}`;
         const genericSearchLink = `https://www.google.com/search?q=${encodeURIComponent(genericQuery)}&tbs=dur:l&tbm=vid`;
         
-        // Add "No Title" search link first
         streams.push({ title: `🔍 No Title: See all results on Google...`, externalUrl: genericSearchLink, behaviorHints: { externalUrl: true } });
 
-        // Add "With Title" search link if an episode title exists
         if (episodeTitle) {
             const specificQuery = `${queryTitle} ${spacedSE} ${episodeTitle}`;
             const specificSearchLink = `https://www.google.com/search?q=${encodeURIComponent(specificQuery)}&tbs=dur:l&tbm=vid`;
@@ -195,7 +223,6 @@ async function getStreamsForContent(type, id, config) {
 
     return { streams };
 }
-
 
 // --- (Server routes - no changes needed here) ---
 app.get('/:configString/manifest.json', (req, res) => {
