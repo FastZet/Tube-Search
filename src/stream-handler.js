@@ -5,9 +5,8 @@ const apiService = require('./api-service');
 const scraperService = require('./scraper-service');
 const scoringService = require('./scoring-service');
 
-
-// ... getStreams function header remains the same ...
 const getStreams = async (type, id, apiKeys) => {
+    // ... function header and initial block unchanged ...
     const start = Date.now();
     if (!type || !id || !apiKeys?.tmdbApiKey) {
         throw new Error('[HANDLER] Invalid arguments: type, id, and tmdbApiKey are required.');
@@ -43,9 +42,18 @@ const getStreams = async (type, id, apiKeys) => {
         searchQueries.forEach((q, i) => console.log(`  ${i + 1}: ${q}`));
 
         console.log('[HANDLER] Step 3/5: Scraping Google for stream candidates...');
-        const scrapedResults = await scraperService.scrapeGoogleForStreams(searchQueries);
+        // MODIFIED: Destructure the new return object
+        const { allResults: scrapedResults, queryStats } = await scraperService.scrapeGoogleForStreams(searchQueries);
+        
+        // ADDED: Detailed query stats logging
         console.log(`[HANDLER] Step 3.1: Found ${scrapedResults.length} unique results.`);
+        queryStats.forEach(stat => {
+            console.log(`  - Query "${stat.query}" returned ${stat.count} results.`);
+        });
+
         if (config.logging.enableDetailedScoring) {
+            console.log('[HANDLER] Step 3.2: Full list of found titles:');
+            // MODIFIED: No truncation
             scrapedResults.forEach((res, i) => console.log(`  ${i + 1}: ${res.title}`));
         }
         
@@ -57,25 +65,29 @@ const getStreams = async (type, id, apiKeys) => {
             }))
             .sort((a, b) => b.scoreData.score - a.scoreData.score);
         
-        const topResult = (scoredResults.length > 0 && scoredResults[0].scoreData.score > 0) ? scoredResults[0] : null;
-
-        if (topResult) {
-            console.log(`[HANDLER] Step 4.1: Final Selection: "${topResult.title}" with score ${topResult.scoreData.score.toFixed(2)}`);
-        }
+        // MODIFIED: Select top 3 results
+        const topResults = scoredResults.length > 0 && scoredResults[0].scoreData.score > 0
+            ? scoredResults.slice(0, 3)
+            : [];
         
         if (config.logging.enableDetailedScoring) {
-            console.log('\n[HANDLER] Step 4.2: Detailed scoring for top results:');
+            console.log('\n[HANDLER] Step 4.1: Detailed scoring for top results:');
             scoredResults.slice(0, 5).forEach((result, index) => {
-                const breakdownLog = _formatBreakdownForLog(result.scoreData.breakdown); // Use helper here
+                const breakdownLog = _formatBreakdownForLog(result.scoreData.breakdown);
                 console.log(`[HANDLER] --- Result ${index + 1}: "${result.title}" ---`);
                 console.log(`[HANDLER]   - Final Score: ${result.scoreData.score.toFixed(2)}`);
-                console.log(`[HANDLER]   - Breakdown: ${breakdownLog}`); // Log formatted string
+                console.log(`[HANDLER]   - Breakdown: ${breakdownLog}`);
             });
         }
         
+        // MODIFIED: Moved this log to the end of the scoring step
+        if (topResults.length > 0) {
+            console.log(`[HANDLER] Step 4.2: Final Selection: ${topResults.length} best streams selected.`);
+        }
+        
         console.log('\n[HANDLER] Step 5/5: Formatting final streams for Stremio.');
-        if (topResult) {
-            streams.push(_formatStream(topResult));
+        if (topResults.length > 0) {
+            streams.push(...topResults.map(_formatStream));
         }
 
     } catch (error) {
@@ -91,8 +103,7 @@ const getStreams = async (type, id, apiKeys) => {
 };
 
 // --- Private Helper Functions ---
-
-// ADDED: Helper to format the breakdown object for clean logging
+// ... functions _formatBreakdownForLog, _buildSearchQueries, _formatStream, _getFallbackStreams are unchanged ...
 const _formatBreakdownForLog = (breakdown) => {
     const formatted = {};
     for (const key in breakdown) {
