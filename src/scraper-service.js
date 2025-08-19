@@ -4,7 +4,6 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const config = require('./config');
 
-// ... selectFirst helper function remains unchanged ...
 const selectFirst = ($, element, selectors) => {
     for (const selector of selectors) {
         const result = $(element).find(selector);
@@ -12,10 +11,9 @@ const selectFirst = ($, element, selectors) => {
             return result.first();
         }
     }
-    return cheerio.load('')('');
+    return cheerio.load('')(''); 
 };
 
-// ... scrapeGoogleForStreams function remains unchanged ...
 const scrapeGoogleForStreams = async (searchQueries) => {
     const allResults = [];
     const seenUrls = new Set();
@@ -59,9 +57,8 @@ const scrapeGoogleForStreams = async (searchQueries) => {
     return allResults;
 };
 
-
 /**
- * Scrapes IMDb for a specific episode's title.
+ * Scrapes IMDb for a specific episode's title using the new page structure.
  * @param {string} imdbId - The IMDb ID of the series.
  * @param {number|string} season - The season number.
  * @param {number|string} episode - The episode number.
@@ -71,45 +68,52 @@ const scrapeImdbForEpisodeTitle = async (imdbId, season, episode) => {
     const url = config.api.imdb.episodesUrl(imdbId, season);
     const { userAgent } = config.scraping;
     const { defaultTimeout } = config.api;
-    const { imdb: selectors } = config.scraping.selectors;
 
     try {
         const response = await axios.get(url, {
             headers: {
                 'User-Agent': userAgent,
-                'Accept-Language': 'en-US,en;q=0.5' // ADDED: More browser-like header
+                'Accept-Language': 'en-US,en;q=0.5'
             },
             timeout: defaultTimeout,
         });
         const $ = cheerio.load(response.data);
         let foundTitle = null;
 
-        $(selectors.episodeListItem.join(', ')).each((i, el) => {
-            const epNumberEl = selectFirst($, el, selectors.episodeNumber);
-            const epNumber = epNumberEl.attr('content');
+        // UPDATED: Using the correct selector for the new IMDb layout
+        $('article.episode-item-wrapper').each((i, el) => {
+            const titleElement = $(el).find('.ipc-title__text');
+            const titleText = titleElement.text().trim(); // e.g., "S1.E1 ∙ Beginnings: Part 1"
+            
+            // NEW LOGIC: Use regex to parse the visible text
+            const match = titleText.match(/^S(\d+)\.E(\d+)/);
 
-            if (epNumber && parseInt(epNumber, 10) === parseInt(episode, 10)) {
-                foundTitle = selectFirst($, el, selectors.episodeTitle).text().trim();
-                return false;
+            if (match) {
+                const scrapedSeason = parseInt(match[1], 10);
+                const scrapedEpisode = parseInt(match[2], 10);
+
+                if (scrapedSeason === parseInt(season, 10) && scrapedEpisode === parseInt(episode, 10)) {
+                    // Extract the title part after the "∙"
+                    const parts = titleText.split('∙');
+                    if (parts.length > 1) {
+                        foundTitle = parts[1].trim();
+                        return false; // Break the loop
+                    }
+                }
             }
         });
         
-        // ADDED: More specific logging for parsing failure
         if (!foundTitle) {
             console.warn(`[SCRAPER_SERVICE] IMDb page scraped successfully, but no match found for S${season}E${episode}.`);
         }
 
         return foundTitle;
     } catch (error) {
-        // ADDED: Detailed error logging
         if (error.response) {
-            // The request was made and the server responded with a status code
             console.error(`[SCRAPER_SERVICE] IMDb scrape failed with status ${error.response.status} for URL: ${url}`);
         } else if (error.request) {
-            // The request was made but no response was received
             console.error(`[SCRAPER_SERVICE] No response received from IMDb for URL: ${url}`);
         } else {
-            // Something happened in setting up the request that triggered an Error
             console.error(`[SCRAPER_SERVICE] Error setting up IMDb scrape request: ${error.message}`);
         }
         return null;
