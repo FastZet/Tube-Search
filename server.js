@@ -156,7 +156,7 @@ async function getStreamsForContent(type, id, config) {
         });
 
         if (scoredResults.length > 0 && scoredResults[0].score > 0) {
-             const finalResults = scoredResults.slice(0, 2);
+             const finalResults = scoredResults.slice(0, 1);
              console.log(`[Log Step 5/5] Success. Returning ${finalResults.length} best streams.`);
              streams = finalResults.map(res => {
                 let cleanTitle = res.title.replace(/ - video Dailymotion/i, '').replace(/\| YouTube/i, '').replace(/- YouTube/i, '').replace(/\| Facebook/i, '').trim().replace(/[\s\-,|]+$/, '');
