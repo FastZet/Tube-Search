@@ -1,6 +1,6 @@
 {
   "name": "tube-search-addon",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "YouTube Stream Provider for Stremio",
   "main": "server.js",
   "scripts": {
