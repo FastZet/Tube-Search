@@ -90,13 +90,57 @@ async function getStreamsForContent(type, id, config) {
         const videoDomains = ['youtube.com', 'dailymotion.com', 'vimeo.com', 'archive.org', 'facebook.com', 'ok.ru'];
 
         const calculateScore = (result) => {
-            const lowerTitle = result.title.toLowerCase(); const lowerQueryTitle = queryTitle.toLowerCase();
-            let scoreBreakdown = { title: 0, s_e: 0, duration: 0, whitelist: 0, durationDiff: null };
-            if (lowerTitle.includes(lowerQueryTitle)) { scoreBreakdown.title = 5; } else { const queryWords = lowerQueryTitle.split(' '); const matchedWords = queryWords.filter(word => lowerTitle.includes(word)); scoreBreakdown.title = 5 * (matchedWords.length / queryWords.length); if (queryWords.length > 2 && matchedWords.length < queryWords.length - 1) scoreBreakdown.title -= 5; }
-            if (type === 'series') { const s_num = parseInt(seasonNum, 10); const ep_num = parseInt(episodeNum, 10); const fullMatchRegex = new RegExp(`s0?${s_num}\\s*e0?${ep_num}|season\\s+0?${s_num}\\s+episode\\s+0?${ep_num}`, 'i'); const seasonMatchRegex = new RegExp(`season\\s+0?${s_num}|s0?${s_num}(?!e)`, 'i'); const episodeMatchRegex = new RegExp(`episode\\s+0?${ep_num}|e0?${ep_num}`, 'i'); if (fullMatchRegex.test(lowerTitle)) { scoreBreakdown.s_e = 4; } else { let partialScore = 0; if (seasonMatchRegex.test(lowerTitle)) partialScore += 2; if (episodeMatchRegex.test(lowerTitle)) partialScore += 2; scoreBreakdown.s_e = partialScore; } }
-            if (apiRuntime > 0) { const scrapedMinutes = parseDurationToMinutes(result.duration); scoreBreakdown.durationDiff = scrapedMinutes ? Math.abs(scrapedMinutes - apiRuntime) : null; if (scrapedMinutes) { const tolerance = type === 'movie' ? 20 : 3; if (scoreBreakdown.durationDiff <= tolerance) { scoreBreakdown.duration = 6 * (1 - (scoreBreakdown.durationDiff / tolerance)); } else { scoreBreakdown.duration = -10; } } }
-            if (videoDomains.some(domain => result.url.includes(domain))) { scoreBreakdown.whitelist = 1; }
-            const totalScore = scoreBreakdown.title + scoreBreakdown.s_e + scoreBreakdown.duration + scoreBreakdown.whitelist;
+            const lowerTitle = result.title.toLowerCase();
+            const lowerQueryTitle = queryTitle.toLowerCase();
+            let scoreBreakdown = { title: 0, episode: 0, season: 0, duration: 0, whitelist: 0, durationDiff: null };
+
+            // 1. Title Score (Max 6 points) - Increased reward for full match
+            if (lowerTitle.includes(lowerQueryTitle)) {
+                scoreBreakdown.title = 6; // Increased from 5
+            } else {
+                const queryWords = lowerQueryTitle.split(' ');
+                const matchedWords = queryWords.filter(word => lowerTitle.includes(word));
+                scoreBreakdown.title = 6 * (matchedWords.length / queryWords.length); // Adjusted max score
+                if (queryWords.length > 2 && matchedWords.length < queryWords.length - 1) scoreBreakdown.title -= 5;
+            }
+
+            // 2. Episode & Season Score (Decoupled for flexibility)
+            if (type === 'series') {
+                const s_num = parseInt(seasonNum, 10);
+                const ep_num = parseInt(episodeNum, 10);
+                const episodeMatchRegex = new RegExp(`episode\\s+0?${ep_num}|e0?${ep_num}`, 'i');
+                const seasonMatchRegex = new RegExp(`season\\s+0?${s_num}|s0?${s_num}`, 'i');
+
+                // Episode match is critical (Max 5 points)
+                if (episodeMatchRegex.test(lowerTitle)) {
+                    scoreBreakdown.episode = 5;
+                }
+                // Season match is a bonus (Max 2 points)
+                if (seasonMatchRegex.test(lowerTitle)) {
+                    scoreBreakdown.season = 2;
+                }
+            }
+
+            // 3. Duration Score (Max 6 points, -10 penalty) - Unchanged
+            if (apiRuntime > 0) {
+                const scrapedMinutes = parseDurationToMinutes(result.duration);
+                scoreBreakdown.durationDiff = scrapedMinutes ? Math.abs(scrapedMinutes - apiRuntime) : null;
+                if (scrapedMinutes) {
+                    const tolerance = type === 'movie' ? 20 : 3;
+                    if (scoreBreakdown.durationDiff <= tolerance) {
+                        scoreBreakdown.duration = 6 * (1 - (scoreBreakdown.durationDiff / tolerance));
+                    } else {
+                        scoreBreakdown.duration = -10;
+                    }
+                }
+            }
+            
+            // 4. Whitelist Bonus (1 point) - Unchanged
+            if (videoDomains.some(domain => result.url.includes(domain))) {
+                scoreBreakdown.whitelist = 1;
+            }
+
+            const totalScore = scoreBreakdown.title + scoreBreakdown.episode + scoreBreakdown.season + scoreBreakdown.duration + scoreBreakdown.whitelist;
             return { score: totalScore, breakdown: scoreBreakdown };
         };
 
