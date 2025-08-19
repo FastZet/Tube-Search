@@ -1,80 +1,204 @@
-# 🎥 Tube Search Stremio Add-on
+# Tube Search — Stremio Add-on 🚀
 
-A Stremio add-on that generates direct Google Search links for movies and series, specifically filtered for "long videos" and "video" results, making it easy to find and access content online.
+A Stremio add-on that finds playable links by **searching multiple video platforms** and presenting **safe external links** inside Stremio. It builds context-aware queries (movie vs. episode), scrapes results, ranks them, and falls back to a Google “Videos” search when needed. All links open externally (browser/app).  &#x20;
 
 ---
 
 ## ✨ Features
 
-* **Intelligent Search Links:** Automatically generates Google search queries based on movie titles or series (including season/episode numbers).
-* **Video-Focused Results:** Links are pre-filtered for "long videos" and general video results on Google, helping you find playable content faster.
-* **API-Powered Metadata:** Uses TMDb and OMDb to accurately identify content and construct precise search queries.
-* **Mobile & AIOStreams Compatible:** Features a unique configuration URL structure that ensures compatibility with Stremio on Android and third-party clients like AIOStreams.
+* **Multi-source discovery:** Scrapes YouTube, Dailymotion, Vimeo, and Archive.org for candidate streams.&#x20;
+* **Context-aware queries:**
+
+  * Movies: `"Title [Year] full movie"` → Google Videos filter.&#x20;
+  * Series: `"Title SxxEyy"` and, when available, `"Title SxxEyy EpisodeTitle"` variants. &#x20;
+* **Result scoring & filtering:** Collects candidates, de-dupes, scores by match/duration, and only keeps high-confidence results; otherwise falls back cleanly. &#x20;
+* **External-only links:** Streams are exposed with `behaviorHints.externalUrl=true` so playback opens in a browser/app (no proxying).&#x20;
+* **Resilient fallback:** If scraping fails or no result passes the threshold, adds a **Google “Videos/Long”** search shortcut. &#x20;
+* **Self-serve configuration UI:** `/configure` page generates the exact Stremio install URL with embedded TMDb/OMDb keys for client compatibility. &#x20;
 
 ---
 
-## 🛠️ How It Works
+## 🧩 How it works (high level)
 
-This add-on acts as a "search provider" within Stremio. When you select a movie or series:
+1. **Stremio requests streams** at `/stream/:type/:id`. The server parses `:type` (`movie` or `series`) and the Stremio ID, then calls `getStreamsForContent`.&#x20;
+2. **Build search queries** from metadata (title/year for movies; title/season/episode and optional episode title for series).  &#x20;
+3. **Scrape multiple platforms**; collect `{title,url,source,duration}` items, de-duplicate, and compute confidence scores. &#x20;
+4. **Produce stream list:**
 
-1.  It uses the provided TMDb/OMDb API keys to fetch accurate title and year information.
-2.  It constructs a tailored Google search query for that content, adding filters like "full movie" or "S01E01" and limiting results to videos.
-3.  It then provides a `stremio://` link that, when clicked, will open a web browser or YouTube app directly to the Google search results page.
-
-**Note on Configuration:** For broad compatibility, your TMDb and OMDb API keys are embedded directly into the add-on's installation URL path. This allows clients that strictly require URLs to end with `/manifest.json` (like Stremio Android and AIOStreams) to function correctly.
-
----
-
-## 🚀 Installation
-
-To install and use the Tube Search add-on, you will need API keys from TMDb and OMDb.
-
-### Prerequisites (Get Your API Keys)
-
-* **TMDb API Key:**
-    1.  Go to [The Movie Database (TMDb) API Documentation](https://www.themoviedb.org/documentation/api).
-    2.  You will need to create a free account and then generate an API key (usually an API Key (v3) is sufficient).
-* **OMDb API Key:**
-    1.  Go to [OMDb API Key Request](http://www.omdbapi.com/apikey.aspx).
-    2.  Register for a free API key.
-
-### Step-by-Step Installation
-
-1.  **Open the Configuration Page:**
-    * Navigate to your Hugging Face Space URL where the add-on is hosted (e.g., `https://your-huggingface-space-url.hf.space/configure`).
-
-2.  **Enter Your API Keys:**
-    * On the configuration page, enter your TMDb API Key and OMDb API Key into the respective fields.
-
-3.  **Generate Install URL:**
-    * Click the "Generate Install URL" button.
-
-4.  **Install in Stremio:**
-    * A link and URL will appear.
-    * **Option A (Click Link):** If you have Stremio installed on your device, simply click the "Install Tube Search Add-on" link.
-    * **Option B (Copy & Paste):** Copy the provided manifest URL (the one that looks like `https://your-huggingface-space-url.hf.space/tmdb=YOUR_TMDB_KEY%7Comdb=YOUR_OMDB_KEY/manifest.json`). Open your Stremio application, go to "Add-ons," click "My Add-ons," then scroll down and click "Install Add-on" (or "Configure" on some clients) and paste the URL.
-
-**Important Note for Updates:**
-If you are updating from a previous version of this add-on (especially if the installation URL structure has changed), it is highly recommended to **uninstall the old add-on first** from your Stremio client(s) before installing the new version with the updated URL.
+   * When scored results exist → map to Stremio `streams[]` with external links.&#x20;
+   * If none pass → add a **Google “Videos (dur\:l)”** search link as graceful fallback. &#x20;
+5. **Client shows options; user clicks**; the link opens outside Stremio (browser/YouTube app).&#x20;
 
 ---
 
-## 📺 Usage
+## 🛠️ Installation
 
-Once installed:
+### Option A — One-click from the config UI
 
-1.  Browse for any movie or series in Stremio.
-2.  When you select a title and view its details, you will see a new stream option labeled something like "🔎 Google Search: 'Movie Title' (Long Videos)" or similar, depending on the content.
-3.  Click this stream link to open the corresponding Google search results in your default web browser or YouTube app.
+1. Open the hosted `/configure` page.&#x20;
+2. Enter **TMDb** and **OMDb** API keys.&#x20;
+3. Click **Generate Install URL** → press **Install Tube Search Add-on**. Stremio will pick up the manifest automatically.&#x20;
+
+### Option B — Manual add in Stremio
+
+* Copy the generated **manifest URL** (pattern below) and paste in **Add-ons → My Add-ons → Install Add-on**:
+
+  ```
+  https://<your-host>/tmdb=<TMDB_KEY>|omdb=<OMDB_KEY>/manifest.json
+  ```
+
+  The config UI shows this URL verbatim and pre-fills from path segments when present. &#x20;
+
+> **Upgrade note:** If the install URL format changed, uninstall the previous add-on first to avoid duplicates/conflicts.&#x20;
 
 ---
 
-## 🤝 Contribution
+## ▶️ Using the add-on
 
-Contributions, bug reports, and feature requests are welcome! Please feel free to open an issue or submit a pull request on the project's GitHub repository.
+* Open any movie/series in Stremio; you’ll see additional entries like:
+
+  * **Search (Videos)** for episodes — generic and “with title” variants. &#x20;
+  * **Search (Long videos)** for movies (prefers full-length).&#x20;
+* Clicking a result opens the external page/app; nothing is streamed through the add-on server.&#x20;
 
 ---
 
-## 📄 License
+## 📦 API / Routes
 
-This project is open-source and available under the [MIT License](https://opensource.org/licenses/MIT).
+* `GET /:configString/manifest.json` — Manifest with add-on definition for Stremio clients; `configString` carries TMDb/OMDb keys.&#x20;
+* `GET /stream/:type/:id` — Main stream handler returning `{ streams: [...] }`.&#x20;
+* `GET /configure` (and `/CONFIG/configure`) — Interactive installer/generator UI.&#x20;
+
+---
+
+## 🧠 Stream generation details
+
+* **Movies:** Builds `"Title [Year] full movie"` and a Google Videos link with `tbm=vid&tbs=dur:l` (long videos).&#x20;
+* **Series:** Builds **two** variants when episode title exists:
+
+  * Generic `"Title SxxEyy"`;
+  * Specific `"Title SxxEyy EpisodeTitle"`;
+    Each uses the same Google Videos filter. &#x20;
+* **Scraping & scoring:** Aggregates results from target platforms, ensures uniqueness, extracts durations/titles, and scores them; if no item surpasses the threshold, triggers fallback.  &#x20;
+* **Always-visible search escape hatch:** Even on success paths, the code appends a “See all results on Google” item (UX affordance).&#x20;
+
+**Returned stream shape (example):**
+
+```json
+{
+  "title": "[YouTube] Cleaned Title\nDuration: 1:45:00",
+  "externalUrl": "https://…",
+  "behaviorHints": { "externalUrl": true }
+}
+```
+
+All streams are marked external to ensure lawful client-side playback.&#x20;
+
+---
+
+## 🧰 Development
+
+### Tech stack & deps
+
+* Node.js + Express server, scraping via **axios** + **cheerio**, Stremio integration via **stremio-addon-sdk**.&#x20;
+
+### Run locally
+
+```bash
+npm install
+npm start
+# server.js is the entrypoint
+```
+
+`server.js` loads the manifest, config parsing, and route handlers. &#x20;
+
+### Docker (example)
+
+A minimal Dockerfile is included to containerize the service for deployment.&#x20;
+
+---
+
+## 🔐 Configuration & keys
+
+* **TMDb** and **OMDb** keys are embedded in the installation path (`/:configString/…`) for broad client compatibility (e.g., Android, AIOStreams) that require `/manifest.json` URLs. Use the `/configure` page to generate correctly. &#x20;
+
+---
+
+## ⚠️ Limitations & notes
+
+* **No direct streaming/proxying:** Links open externally; quality/availability depends on the source site.&#x20;
+* **Scraping fragility:** If selectors/layouts change on third-party sites, the add-on falls back to Google Videos search. &#x20;
+* **Duplicates/Noise:** De-duplication is applied, but some noise may still appear; the fallback entry remains as a quick “see all results” escape. &#x20;
+
+---
+
+## 🧭 Mermaid – end-to-end flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as User (Stremio)
+  participant S as Stremio Client
+  participant A as Tube Search Add-on
+  participant Q as Query Builder
+  participant C as Collect & Score
+  participant G as Google Videos Fallback
+
+  U->>S: Search & open a movie/episode
+  S->>A: GET /stream/:type/:id
+  A->>Q: Build queries from :type/:id (title, year, SxxEyy, ep title)
+  Q-->>A: Query set (movie/series variants)
+  A->>C: Scrape platforms (YT/Vimeo/Dailymotion/Archive)
+  C-->>A: Candidate list (title,url,source,duration)
+  A->>C: De-dupe + score + filter
+  alt Results >= threshold
+    C-->>A: High-confidence results
+    A-->>S: streams[] with externalUrl=true
+  else None pass threshold or scraping error
+    A->>G: Build Google tbm=vid&tbs=dur:l link
+    G-->>A: Fallback search item
+    A-->>S: streams[] with fallback item
+  end
+  S-->>U: Show stream options
+  U->>S: Click a result
+  S-->>U: Open external browser/app to selected URL
+```
+
+---
+
+## 📁 Project structure
+
+```
+.
+└── Tube-Search/
+    ├── manifest.json
+    ├── package.json
+    ├── public/
+    │   └── configure.html
+    └── server.js
+```
+
+Entry points, routes, and UI are implemented in these files.&#x20;
+
+---
+
+## 🤝 Contributing
+
+Issues and PRs are welcome—improvements to scraping robustness, scoring, and provider coverage are especially valuable. (The `/configure` page is also a great place to add validation UX.)&#x20;
+
+---
+
+## 📜 License
+
+MIT.&#x20;
+
+---
+
+### Appendix — Key code references
+
+* Stream handler & controller wiring (routes):&#x20;
+* External stream mapping + titles/durations:&#x20;
+* Google fallback (both movie/series):   &#x20;
+* Scraping & candidate capture (cheerio selectors, de-dupe):&#x20;
+* Config UI generation & prefill:&#x20;
+* Dependencies & entry script:&#x20;
