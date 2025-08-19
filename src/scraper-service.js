@@ -4,13 +4,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const config = require('./config');
 
-/**
- * A resilient selector function that tries an array of selectors in order.
- * @param {cheerio.CheerioAPI} $ - The Cheerio instance.
- * @param {cheerio.Element} element - The parent element to search within.
- * @param {string[]} selectors - An array of CSS selectors to try.
- * @returns {cheerio.Cheerio<cheerio.Element>} The first matching element.
- */
+// ... selectFirst helper function remains unchanged ...
 const selectFirst = ($, element, selectors) => {
     for (const selector of selectors) {
         const result = $(element).find(selector);
@@ -18,18 +12,13 @@ const selectFirst = ($, element, selectors) => {
             return result.first();
         }
     }
-    return cheerio.load('')(''); // Return an empty Cheerio object if no match
+    return cheerio.load('')('');
 };
 
-/**
- * Scrapes Google Video search for potential stream links.
- * @param {string[]} searchQueries - An array of search strings.
- * @returns {Promise<Array<object>>} A promise that resolves to an array of scraped results.
- */
+// ... scrapeGoogleForStreams function remains unchanged ...
 const scrapeGoogleForStreams = async (searchQueries) => {
     const allResults = [];
     const seenUrls = new Set();
-    // CORRECTED: Pulling userAgent and defaultTimeout from their correct config locations
     const { userAgent } = config.scraping;
     const { defaultTimeout } = config.api;
     const { google: selectors } = config.scraping.selectors;
@@ -65,11 +54,11 @@ const scrapeGoogleForStreams = async (searchQueries) => {
             });
         } catch (error) {
             console.error(`[SCRAPER_SERVICE] Failed to scrape Google for query "${query}": ${error.message}`);
-            // Continue to next query even if one fails
         }
     }
     return allResults;
 };
+
 
 /**
  * Scrapes IMDb for a specific episode's title.
@@ -80,14 +69,16 @@ const scrapeGoogleForStreams = async (searchQueries) => {
  */
 const scrapeImdbForEpisodeTitle = async (imdbId, season, episode) => {
     const url = config.api.imdb.episodesUrl(imdbId, season);
-    // CORRECTED: Pulling userAgent and defaultTimeout from their correct config locations
     const { userAgent } = config.scraping;
     const { defaultTimeout } = config.api;
     const { imdb: selectors } = config.scraping.selectors;
 
     try {
         const response = await axios.get(url, {
-            headers: { 'User-Agent': userAgent },
+            headers: {
+                'User-Agent': userAgent,
+                'Accept-Language': 'en-US,en;q=0.5' // ADDED: More browser-like header
+            },
             timeout: defaultTimeout,
         });
         const $ = cheerio.load(response.data);
@@ -99,12 +90,28 @@ const scrapeImdbForEpisodeTitle = async (imdbId, season, episode) => {
 
             if (epNumber && parseInt(epNumber, 10) === parseInt(episode, 10)) {
                 foundTitle = selectFirst($, el, selectors.episodeTitle).text().trim();
-                return false; // Break the loop once found
+                return false;
             }
         });
+        
+        // ADDED: More specific logging for parsing failure
+        if (!foundTitle) {
+            console.warn(`[SCRAPER_SERVICE] IMDb page scraped successfully, but no match found for S${season}E${episode}.`);
+        }
+
         return foundTitle;
     } catch (error) {
-        console.error(`[SCRAPER_SERVICE] Failed to scrape IMDb page for ${imdbId} S${season}: ${error.message}`);
+        // ADDED: Detailed error logging
+        if (error.response) {
+            // The request was made and the server responded with a status code
+            console.error(`[SCRAPER_SERVICE] IMDb scrape failed with status ${error.response.status} for URL: ${url}`);
+        } else if (error.request) {
+            // The request was made but no response was received
+            console.error(`[SCRAPER_SERVICE] No response received from IMDb for URL: ${url}`);
+        } else {
+            // Something happened in setting up the request that triggered an Error
+            console.error(`[SCRAPER_SERVICE] Error setting up IMDb scrape request: ${error.message}`);
+        }
         return null;
     }
 };
