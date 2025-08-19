@@ -170,7 +170,7 @@ async function getStreamsForContent(type, id, config) {
                 scoreBreakdown.whitelist = 1;
             }
 
-            const totalScore = Object.values(scoreBreakdown).reduce((acc, val) => acc + (typeof val === 'number' ? val : 0), 0);
+            const totalScore = scoreBreakdown.googleRank + scoreBreakdown.title + scoreBreakdown.episodeNum + scoreBreakdown.episodeTitle + scoreBreakdown.season + scoreBreakdown.duration + scoreBreakdown.whitelist;
             return { score: totalScore, breakdown: scoreBreakdown };
         };
 
