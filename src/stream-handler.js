@@ -5,15 +5,9 @@ const apiService = require('./api-service');
 const scraperService = require('./scraper-service');
 const scoringService = require('./scoring-service');
 
-/**
- * Orchestrates the process of fetching metadata, scraping, and scoring to find streams.
- * @param {string} type - The content type ('movie' or 'series').
- * @param {string} id - The Stremio ID for the content.
- * @param {object} apiKeys - The user's API keys { tmdbApiKey, omdbApiKey }.
- * @returns {Promise<{streams: Array}>} A promise that resolves to an object containing an array of stream objects.
- */
+
+// ... getStreams function header remains the same ...
 const getStreams = async (type, id, apiKeys) => {
-    // ADDED: Performance monitoring and input validation
     const start = Date.now();
     if (!type || !id || !apiKeys?.tmdbApiKey) {
         throw new Error('[HANDLER] Invalid arguments: type, id, and tmdbApiKey are required.');
@@ -26,7 +20,6 @@ const getStreams = async (type, id, apiKeys) => {
     try {
         console.log(`\n[HANDLER] ----- New Request Started: ${type} ${id} -----`);
 
-        // --- Step 1: Metadata Enrichment ---
         console.log('[HANDLER] Step 1/5: Starting metadata enrichment...');
         metadata = await apiService.getMetadata(type, id, apiKeys);
 
@@ -45,12 +38,10 @@ const getStreams = async (type, id, apiKeys) => {
             throw new Error('Failed to retrieve a title for the content. Cannot proceed.');
         }
 
-        // --- Step 2: Build Search Queries ---
         searchQueries = _buildSearchQueries(metadata, type);
         console.log('[HANDLER] Step 2/5: Built search queries:');
         searchQueries.forEach((q, i) => console.log(`  ${i + 1}: ${q}`));
 
-        // --- Step 3: Scrape for Potential Streams ---
         console.log('[HANDLER] Step 3/5: Scraping Google for stream candidates...');
         const scrapedResults = await scraperService.scrapeGoogleForStreams(searchQueries);
         console.log(`[HANDLER] Step 3.1: Found ${scrapedResults.length} unique results.`);
@@ -58,7 +49,6 @@ const getStreams = async (type, id, apiKeys) => {
             scrapedResults.forEach((res, i) => console.log(`  ${i + 1}: ${res.title}`));
         }
         
-        // --- Step 4: Score and Select the Best Result ---
         console.log('\n[HANDLER] Step 4/5: Scoring results...');
         const scoredResults = scrapedResults
             .map(result => ({
@@ -76,13 +66,13 @@ const getStreams = async (type, id, apiKeys) => {
         if (config.logging.enableDetailedScoring) {
             console.log('\n[HANDLER] Step 4.2: Detailed scoring for top results:');
             scoredResults.slice(0, 5).forEach((result, index) => {
+                const breakdownLog = _formatBreakdownForLog(result.scoreData.breakdown); // Use helper here
                 console.log(`[HANDLER] --- Result ${index + 1}: "${result.title}" ---`);
                 console.log(`[HANDLER]   - Final Score: ${result.scoreData.score.toFixed(2)}`);
-                console.log(`[HANDLER]   - Breakdown: ${JSON.stringify(result.scoreData.breakdown)}`);
+                console.log(`[HANDLER]   - Breakdown: ${breakdownLog}`); // Log formatted string
             });
         }
         
-        // --- Step 5: Format Streams for Stremio ---
         console.log('\n[HANDLER] Step 5/5: Formatting final streams for Stremio.');
         if (topResult) {
             streams.push(_formatStream(topResult));
@@ -90,13 +80,10 @@ const getStreams = async (type, id, apiKeys) => {
 
     } catch (error) {
         console.error(`[HANDLER] An error occurred in the main stream handler: ${error.message}`);
-        // Fallback stream will be added below regardless of error
     }
 
-    // Always add fallback Google search links
     streams.push(..._getFallbackStreams(metadata, type));
     
-    // ADDED: Log total request duration
     const duration = Date.now() - start;
     console.log(`[HANDLER] Request for ${type}:${id} completed in ${duration}ms. Returning ${streams.length} streams.`);
 
@@ -104,6 +91,16 @@ const getStreams = async (type, id, apiKeys) => {
 };
 
 // --- Private Helper Functions ---
+
+// ADDED: Helper to format the breakdown object for clean logging
+const _formatBreakdownForLog = (breakdown) => {
+    const formatted = {};
+    for (const key in breakdown) {
+        const value = breakdown[key];
+        formatted[key] = typeof value === 'number' ? value.toFixed(2) : value;
+    }
+    return JSON.stringify(formatted);
+};
 
 const _buildSearchQueries = (metadata, type) => {
     const queries = [];
@@ -139,7 +136,6 @@ const _formatStream = (result) => {
 
 const _getFallbackStreams = (metadata, type) => {
     if (!metadata || !metadata.title) {
-        // A safety net in case metadata fetching completely fails
         return [{ 
             title: '🔍 Metadata failed, click to search Google manually', 
             externalUrl: 'https://google.com',
@@ -163,7 +159,7 @@ const _getFallbackStreams = (metadata, type) => {
                 behaviorHints: { externalUrl: true },
             });
         }
-    } else { // Movie
+    } else {
         const movieQuery = `${metadata.title} ${metadata.year || ''} full movie`;
         fallbacks.push({
             title: `🔍 See all results on Google...`,
