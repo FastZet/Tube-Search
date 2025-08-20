@@ -1,33 +1,33 @@
 # Tube Search — Stremio Add-on 🚀
 
-A Stremio add-on that finds playable links by **searching multiple video platforms** and presenting **safe external links** inside Stremio. It builds context-aware queries (movie vs. episode), scrapes results, ranks them, and falls back to a Google “Videos” search when needed. All links open externally (browser/app).  &#x20;
+A Stremio add-on that finds playable links by scraping **IMDb, TMDb and OMDB for accurate metadata** and searching multiple video platforms. It builds context-aware queries, scrapes Google for results, ranks them with an intelligent scoring algorithm, and presents safe, external links inside Stremio.
 
 ---
 
 ## ✨ Features
 
-* **Multi-source discovery:** Scrapes YouTube, Dailymotion, Vimeo, and Archive.org for candidate streams.&#x20;
-* **Context-aware queries:**
-
-  * Movies: `"Title [Year] full movie"` → Google Videos filter.&#x20;
-  * Series: `"Title SxxEyy"` and, when available, `"Title SxxEyy EpisodeTitle"` variants. &#x20;
-* **Result scoring & filtering:** Collects candidates, de-dupes, scores by match/duration, and only keeps high-confidence results; otherwise falls back cleanly. &#x20;
-* **External-only links:** Streams are exposed with `behaviorHints.externalUrl=true` so playback opens in a browser/app (no proxying).&#x20;
-* **Resilient fallback:** If scraping fails or no result passes the threshold, adds a **Google “Videos/Long”** search shortcut. &#x20;
-* **Self-serve configuration UI:** `/configure` page generates the exact Stremio install URL with embedded TMDb/OMDb keys for client compatibility. &#x20;
+*   **Accurate Metadata:** Uses **IMDb scraping** as the primary source for episode titles, ensuring the most accurate search queries. Falls back to TMDb/OMDb APIs and also leans on them for metadata except episode titles.
+*   **Intelligent Scoring:** Ranks results using a flexible algorithm that considers:
+    *   **Google's Own Ranking:** Gives a bonus to the top results from Google.
+    *   **Word-based Title Matching:** Smartly compares titles by word overlap, ignoring minor punctuation differences.
+    *   **Duration Matching:** Prioritizes videos with a runtime close to the official one.
+*   **Multi-source Discovery:** Scrapes Google's video search, which indexes YouTube, Dailymotion, Vimeo, and Archive.org for candidate streams.
+*   **External-only Links:** Streams are exposed with `behaviorHints.externalUrl=true` so playback opens in a browser or native app (no proxying).
+*   **Resilient Fallback:** If scraping fails or no result scores high enough, the add-on provides fallback Google search links so the user is never left with a dead end.
+*   **Self-serve Configuration UI:** A simple `/configure` page generates the exact Stremio install URL with embedded TMDb/OMDb keys for maximum client compatibility.
 
 ---
 
 ## 🧩 How it works (high level)
 
-1. **Stremio requests streams** at `/stream/:type/:id`. The server parses `:type` (`movie` or `series`) and the Stremio ID, then calls `getStreamsForContent`.&#x20;
-2. **Build search queries** from metadata (title/year for movies; title/season/episode and optional episode title for series).  &#x20;
-3. **Scrape multiple platforms**; collect `{title,url,source,duration}` items, de-duplicate, and compute confidence scores. &#x20;
-4. **Produce stream list:**
-
-   * When scored results exist → map to Stremio `streams[]` with external links.&#x20;
-   * If none pass → add a **Google “Videos (dur\:l)”** search link as graceful fallback. &#x20;
-5. **Client shows options; user clicks**; the link opens outside Stremio (browser/YouTube app).&#x20;
+1.  **Stremio requests streams** at `/stream/:type/:id`. The request is passed to the central Stream Handler.
+2.  **Fetch Metadata:** The handler calls the **API Service** to fetch base metadata (title, year, runtime) from TMDb/OMDb in parallel.
+3.  **Enrich Episode Data:** For series, the handler then calls the **Scraper Service** to scrape the official IMDb episodes page for the exact episode title, ensuring the highest data quality.
+4.  **Build Search Queries** based on the rich metadata. For series, it creates two queries: one with the episode number and one with the episode number and title.
+5.  **Scrape Google:** The Scraper Service executes the queries against Google's video search and returns a clean, de-duplicated list of potential video links.
+6.  **Score and Rank:** The **Scoring Service** is called with the metadata and scraped results. It calculates a confidence score for each result.
+7.  **Produce Stream List:** The handler selects the top two highest-scoring results and formats them into a Stremio `streams[]` array. It always appends fallback Google search links as well.
+8.  **Client shows options; user clicks**; the link opens externally in a browser or the appropriate app.
 
 ---
 
@@ -35,64 +35,39 @@ A Stremio add-on that finds playable links by **searching multiple video platfor
 
 ### Option A — One-click from the config UI
 
-1. Open the hosted `/configure` page.&#x20;
-2. Enter **TMDb** and **OMDb** API keys.&#x20;
-3. Click **Generate Install URL** → press **Install Tube Search Add-on**. Stremio will pick up the manifest automatically.&#x20;
+1.  Open the hosted `/configure` page.
+2.  Enter **TMDb** and **OMDb** API keys.
+3.  Click **Generate Install URL** → press **Install Tube Search Add-on**. Stremio will pick up the manifest automatically.
 
 ### Option B — Manual add in Stremio
 
-* Copy the generated **manifest URL** (pattern below) and paste in **Add-ons → My Add-ons → Install Add-on**:
+*   Copy the generated **manifest URL** (pattern below) and paste it into **Add-ons → My Add-ons → Install Add-on**:
 
-  ```
-  https://<your-host>/tmdb=<TMDB_KEY>|omdb=<OMDB_KEY>/manifest.json
-  ```
+    ```
+    https://<your-host>/tmdb=<TMDB_KEY>|omdb=<OMDB_KEY>/manifest.json
+    ```
 
-  The config UI shows this URL verbatim and pre-fills from path segments when present. &#x20;
+    The config UI shows this URL verbatim and pre-fills from path segments when present.
 
-> **Upgrade note:** If the install URL format changed, uninstall the previous add-on first to avoid duplicates/conflicts.&#x20;
+> **Upgrade note:** To ensure you get the latest version, it's best to uninstall the previous version of the add-on from Stremio before installing the new one.
 
 ---
 
 ## ▶️ Using the add-on
 
-* Open any movie/series in Stremio; you’ll see additional entries like:
-
-  * **Search (Videos)** for episodes — generic and “with title” variants. &#x20;
-  * **Search (Long videos)** for movies (prefers full-length).&#x20;
-* Clicking a result opens the external page/app; nothing is streamed through the add-on server.&#x20;
+*   Open any movie/series in Stremio; you’ll see entries for the top two results found.
+*   You will also see fallback search links like:
+    *   **🔍 No Title: See all results on Google...** (for episodes, a generic search)
+    *   **🔍 With Title: See all results on Google...** (a more specific search if an episode title was found)
+*   Clicking a result opens the external page/app; nothing is streamed through the add-on server.
 
 ---
 
 ## 📦 API / Routes
 
-* `GET /:configString/manifest.json` — Manifest with add-on definition for Stremio clients; `configString` carries TMDb/OMDb keys.&#x20;
-* `GET /stream/:type/:id` — Main stream handler returning `{ streams: [...] }`.&#x20;
-* `GET /configure` (and `/CONFIG/configure`) — Interactive installer/generator UI.&#x20;
-
----
-
-## 🧠 Stream generation details
-
-* **Movies:** Builds `"Title [Year] full movie"` and a Google Videos link with `tbm=vid&tbs=dur:l` (long videos).&#x20;
-* **Series:** Builds **two** variants when episode title exists:
-
-  * Generic `"Title SxxEyy"`;
-  * Specific `"Title SxxEyy EpisodeTitle"`;
-    Each uses the same Google Videos filter. &#x20;
-* **Scraping & scoring:** Aggregates results from target platforms, ensures uniqueness, extracts durations/titles, and scores them; if no item surpasses the threshold, triggers fallback.  &#x20;
-* **Always-visible search escape hatch:** Even on success paths, the code appends a “See all results on Google” item (UX affordance).&#x20;
-
-**Returned stream shape (example):**
-
-```json
-{
-  "title": "[YouTube] Cleaned Title\nDuration: 1:45:00",
-  "externalUrl": "https://…",
-  "behaviorHints": { "externalUrl": true }
-}
-```
-
-All streams are marked external to ensure lawful client-side playback.&#x20;
+*   `GET /:configString/manifest.json` — Manifest with add-on definition for Stremio clients; `configString` carries TMDb/OMDb keys.
+*   `GET /:configString/stream/:type/:id.json` — Main stream handler returning `{ streams: [...] }`.
+*   `GET /configure` (and `/:configString/configure`) — Interactive installer/generator UI.
 
 ---
 
@@ -100,105 +75,94 @@ All streams are marked external to ensure lawful client-side playback.&#x20;
 
 ### Tech stack & deps
 
-* Node.js + Express server, scraping via **axios** + **cheerio**, Stremio integration via **stremio-addon-sdk**.&#x20;
+*   **Web Server:** Node.js + Express
+*   **Services:**
+    *   **Metadata:** `axios` for TMDb/OMDb API calls.
+    *   **Scraping:** `axios` + `cheerio` for IMDb and Google scraping.
+*   **Stremio Integration:** `stremio-addon-sdk`
 
 ### Run locally
 
 ```bash
 npm install
 npm start
-# server.js is the entrypoint
 ```
 
-`server.js` loads the manifest, config parsing, and route handlers. &#x20;
+The application is now built with a modular, service-oriented architecture. `server.js` is a lean web layer, and all the business logic is cleanly organized in the `src` directory.
 
 ### Docker (example)
 
-A minimal Dockerfile is included to containerize the service for deployment.&#x20;
+A `Dockerfile` is included to containerize the service for easy deployment.
 
 ---
 
 ## 🔐 Configuration & keys
 
-* **TMDb** and **OMDb** keys are embedded in the installation path (`/:configString/…`) for broad client compatibility (e.g., Android, AIOStreams) that require `/manifest.json` URLs. Use the `/configure` page to generate correctly. &#x20;
+*   **TMDb** and **OMDb** keys are embedded in the installation path (`/:configString/...`) for broad client compatibility (e.g., Android, AIOStreams). Use the `/configure` page to generate the correct URL.
+*   All internal settings, such as scoring weights and CSS selectors, are managed in the central `src/config.js` file.
 
 ---
 
-## ⚠️ Limitations & notes
-
-* **No direct streaming/proxying:** Links open externally; quality/availability depends on the source site.&#x20;
-* **Scraping fragility:** If selectors/layouts change on third-party sites, the add-on falls back to Google Videos search. &#x20;
-* **Duplicates/Noise:** De-duplication is applied, but some noise may still appear; the fallback entry remains as a quick “see all results” escape. &#x20;
-
----
-
-## 🧭 Mermaid – end-to-end flow
+## 🧭 Mermaid – End-to-End Flow (Refactored Architecture)
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant U as User (Stremio)
   participant S as Stremio Client
-  participant A as Tube Search Add-on
-  participant Q as Query Builder
-  participant C as Collect & Score
-  participant G as Google Videos Fallback
+  participant Server as server.js
+  participant Handler as Stream Handler
+  participant API as API Service
+  participant Scraper as Scraper Service
+  participant Scorer as Scoring Service
 
-  U->>S: Search & open a movie/episode
-  S->>A: GET /stream/:type/:id
-  A->>Q: Build queries from :type/:id (title, year, SxxEyy, ep title)
-  Q-->>A: Query set (movie/series variants)
-  A->>C: Scrape platforms (YT/Vimeo/Dailymotion/Archive)
-  C-->>A: Candidate list (title,url,source,duration)
-  A->>C: De-dupe + score + filter
-  alt Results >= threshold
-    C-->>A: High-confidence results
-    A-->>S: streams[] with externalUrl=true
-  else None pass threshold or scraping error
-    A->>G: Build Google tbm=vid&tbs=dur:l link
-    G-->>A: Fallback search item
-    A-->>S: streams[] with fallback item
-  end
-  S-->>U: Show stream options
-  U->>S: Click a result
-  S-->>U: Open external browser/app to selected URL
+  U->>S: Opens a movie/episode
+  S->>Server: GET /stream/:type/:id
+  Server->>Handler: getStreams(type, id, keys)
+  Handler->>API: getMetadata()
+  API-->>Handler: Returns base metadata (title, year)
+  Handler->>Scraper: scrapeImdbForEpisodeTitle()
+  Scraper-->>Handler: Returns enriched episode title
+  Handler->>Scraper: scrapeGoogleForStreams(queries)
+  Scraper-->>Handler: Returns list of video results
+  Handler->>Scorer: calculateScore(results, metadata)
+  Scorer-->>Handler: Returns scored & sorted results
+  Handler-->>Server: Final stream list (top 2 + fallbacks)
+  Server-->>S: Sends { streams: [...] } JSON
+  S-->>U: Displays stream options
+  U->>S: Clicks a stream link
+  S-->>U: Opens link in external browser/app
 ```
 
 ---
 
-## 📁 Project structure
+## 📁 Project structure (Refactored)
 
 ```
 .
-└── Tube-Search/
-    ├── manifest.json
-    ├── package.json
+└── Tube-Search-main/
+    ├── src/
+    │   ├── api-service.js        # Handles TMDb/OMDb API calls
+    │   ├── config.js             # Central configuration for the whole app
+    │   ├── scraper-service.js    # Handles all IMDb and Google scraping
+    │   ├── scoring-service.js    # Contains the intelligent scoring logic
+    │   └── stream-handler.js     # Orchestrates the services to produce streams
     ├── public/
     │   └── configure.html
-    └── server.js
+    ├── server.js                 # Lean Express server (routes only)
+    ├── manifest.json
+    ├── package.json
+    └── Dockerfile
 ```
-
-Entry points, routes, and UI are implemented in these files.&#x20;
 
 ---
 
 ## 🤝 Contributing
 
-Issues and PRs are welcome—improvements to scraping robustness, scoring, and provider coverage are especially valuable. (The `/configure` page is also a great place to add validation UX.)&#x20;
+Issues and PRs are welcome—improvements to scraping robustness, scoring, and provider coverage are especially valuable.
 
 ---
 
 ## 📜 License
 
-MIT.&#x20;
-
----
-
-### Appendix — Key code references
-
-* Stream handler & controller wiring (routes):&#x20;
-* External stream mapping + titles/durations:&#x20;
-* Google fallback (both movie/series):   &#x20;
-* Scraping & candidate capture (cheerio selectors, de-dupe):&#x20;
-* Config UI generation & prefill:&#x20;
-* Dependencies & entry script:&#x20;
+MIT.
