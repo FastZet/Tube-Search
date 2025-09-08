@@ -4,9 +4,10 @@ FROM node:24-slim AS build
 # Set working directory
 WORKDIR /app
 
-# Install git (required for cloning repo)
+# Install git + CA certificates for HTTPS clone
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone Tube Search repo
