@@ -1,35 +1,39 @@
-# Use a lightweight official Node.js runtime as a base image
-FROM node:22-slim
+# Use latest Node.js 24 slim image
+FROM node:24-slim AS build
 
-# Set the working directory in the container
+# Set working directory
 WORKDIR /app
 
-# Install Git (already in your Dockerfile)
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-
-# Install Python, pip, ffmpeg, and yt-dlp ---
-# These commands will execute within the /app working directory
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    ffmpeg \
+# Install git (required for cloning repo)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Use --break-system-packages to bypass externally-managed-environment error
-RUN pip3 install yt-dlp --break-system-packages
-
-# Clone your Tube Search add-on repository into the current directory
-# REPLACE THIS URL with the URL of your PUBLIC Tube Search GitHub repository
+# Clone Tube Search repo
 RUN git clone https://github.com/FastZet/Tube-Search.git .
 
-# Install application dependencies for the cloned project
-RUN npm install --omit=dev
+# Install only production dependencies
+RUN npm ci --omit=dev
 
-# Set the port environment variable. Hugging Face Spaces typically use 7860.
+# --------- Final minimal image ---------
+FROM node:24-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy built app from builder
+COPY --from=build /app /app
+
+# Set environment variables
+ENV NODE_ENV=production
 ENV PORT=7860
 
-# Expose the port on which your application will listen
+# Expose application port
 EXPOSE 7860
 
-# Define the command to run your app
+# Run the application as non-root user for security
+RUN useradd -m appuser && chown -R appuser /app
+USER appuser
+
+# Start the server
 CMD ["npm", "start"]
