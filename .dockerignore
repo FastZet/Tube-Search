@@ -1,6 +1,32 @@
+# Node dependencies and logs
 node_modules
+npm-debug.log*
+yarn-error.log
+pnpm-debug.log
+
+# Env and credentials
+.env
+.env.*
+.npmrc
+
+# VCS and CI metadata
 .git
 .gitignore
-npm-debug.log
-Dockerfile
-README.md
+.github
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+# Caches and coverage
+.cache
+coverage
+*.log
+logs
+tmp
+
+# Build outputs (if ever generated)
+dist
+build
