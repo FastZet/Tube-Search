@@ -1,40 +1,28 @@
-# Use latest Node.js 24 slim image
-FROM node:24-slim AS build
+# syntax=docker/dockerfile:1
+FROM node:24-alpine
 
-# Set working directory
-WORKDIR /app
-
-# Install git + CA certificates for HTTPS clone
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Clone Tube Search repo
-RUN git clone https://github.com/FastZet/Tube-Search.git .
-
-# Install only production dependencies
-RUN npm install --omit=dev
-
-# --------- Final minimal image ---------
-FROM node:24-slim
-
-# Set working directory
-WORKDIR /app
-
-# Copy built app from builder
-COPY --from=build /app /app
-
-# Set environment variables
 ENV NODE_ENV=production
-ENV PORT=7860
+WORKDIR /app
 
-# Expose application port
-EXPOSE 7860
+# Install curl for healthcheck
+RUN apk add --no-cache curl
 
-# Run the application as non-root user for security
-RUN useradd -m appuser && chown -R appuser /app
-USER appuser
+# Install only production deps using layer caching
+COPY package*.json ./
+RUN npm config set fund false && npm config set audit false \
+ && if [ -f package-lock.json ] ; then npm ci --omit=dev ; else npm install --omit=dev ; fi
 
-# Start the server
+# Copy the rest of the source and drop privileges
+COPY --chown=node:node . .
+USER node
+
+# Match your server defaults
+ENV PORT=7870
+EXPOSE 7870
+
+# Healthcheck hits your existing /health route
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD curl -fsS http://localhost:7870/health || exit 1
+
+# Start the server (e.g., via "npm start")
 CMD ["npm", "start"]
