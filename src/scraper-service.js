@@ -1,6 +1,6 @@
 // src/scraper-service.js
 
-const axios = require('axios');
+const http = require('./http-client');
 const cheerio = require('cheerio');
 const config = require('./config');
 
@@ -18,18 +18,16 @@ const selectFirst = ($, element, selectors) => {
 const scrapeGoogleForStreams = async (searchQueries) => {
     const allResults = [];
     const seenUrls = new Set();
-    const queryStats = []; // ADDED: For tracking results per query
+    const queryStats = [];
     const { userAgent } = config.scraping;
-    const { defaultTimeout } = config.api;
     const { google: selectors } = config.scraping.selectors;
 
     for (const query of searchQueries) {
-        let resultsFromThisQuery = 0; // ADDED: Counter for this specific query
+        let resultsFromThisQuery = 0;
         try {
             const searchUrl = `${config.scraping.googleSearchUrl}?q=${encodeURIComponent(query)}&tbs=dur:l&tbm=vid`;
-            const response = await axios.get(searchUrl, {
+            const response = await http.get(searchUrl, {
                 headers: { 'User-Agent': userAgent },
-                timeout: defaultTimeout,
             });
 
             const $ = cheerio.load(response.data);
@@ -44,23 +42,22 @@ const scrapeGoogleForStreams = async (searchQueries) => {
 
                 if (url && url.startsWith('http') && !seenUrls.has(url)) {
                     const title = selectFirst($, el, selectors.title).text().trim();
-                    const source = selectFirst($, el, selectors.source).text().split(' › ')[0].replace('www.', '').trim();
+                    const source = selectFirst($, el, selectors.source).text().split(' › ').replace('www.', '').trim();
                     const duration = selectFirst($, el, selectors.duration).text().trim();
 
                     if (title) {
                         allResults.push({ title, url, source, duration, index: i });
                         seenUrls.add(url);
-                        resultsFromThisQuery++; // ADDED: Increment counter
+                        resultsFromThisQuery++;
                     }
                 }
             });
         } catch (error) {
             console.error(`[SCRAPER_SERVICE] Failed to scrape Google for query "${query}": ${error.message}`);
         }
-        // ADDED: Store the stat for this query
         queryStats.push({ query, count: resultsFromThisQuery });
     }
-    return { allResults, queryStats }; // MODIFIED: Return object
+    return { allResults, queryStats };
 };
 
 
@@ -68,12 +65,10 @@ const scrapeGoogleForStreams = async (searchQueries) => {
 const scrapeImdbForEpisodeTitle = async (imdbId, season, episode) => {
     const url = config.api.imdb.episodesUrl(imdbId, season);
     const { userAgent } = config.scraping;
-    const { defaultTimeout } = config.api;
 
     try {
-        const response = await axios.get(url, {
+        const response = await http.get(url, {
             headers: { 'User-Agent': userAgent, 'Accept-Language': 'en-US,en;q=0.5' },
-            timeout: defaultTimeout,
         });
         const $ = cheerio.load(response.data);
         let foundTitle = null;
@@ -85,7 +80,7 @@ const scrapeImdbForEpisodeTitle = async (imdbId, season, episode) => {
             const match = titleText.match(/^S(\d+)\.E(\d+)/);
             if (match) {
                 const scrapedSeason = parseInt(match[1], 10);
-                const scrapedEpisode = parseInt(match[2], 10);
+                const scrapedEpisode = parseInt(match[22], 10);
                 if (scrapedSeason === parseInt(season, 10) && scrapedEpisode === parseInt(episode, 10)) {
                     const parts = titleText.split('∙');
                     if (parts.length > 1) {
