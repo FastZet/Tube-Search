@@ -1,5 +1,4 @@
 // src/api-service.js
-
 const http = require('./http-client');
 const config = require('./config');
 
@@ -7,17 +6,15 @@ const { tmdb: tmdbConfig, omdb: omdbConfig } = config.api;
 
 /**
  * Fetches metadata from TMDb and OMDb APIs in parallel.
- * @param {string} type - The content type ('movie' or 'series').
- * @param {string} id - The Stremio ID (e.g., 'tt0414762:1:4').
- * @returns {Promise<object>} A promise that resolves to a consolidated metadata object.
+ * @param {string} type - 'movie' or 'series'.
+ * @param {string} id - Stremio ID (e.g., 'tt0414762:1:4').
+ * @returns {Promise<object>}
  */
 const getMetadata = async (type, id) => {
     const tmdbApiKey = process.env.TMDB_API_KEY || '';
     const omdbApiKey = process.env.OMDB_API_KEY || '';
 
-    if (!tmdbApiKey) {
-        throw new Error('[API_SERVICE] TMDB_API_KEY env var is required.');
-    }
+    if (!tmdbApiKey) throw new Error('[API_SERVICE] TMDB_API_KEY env var is required.');
 
     let { imdbId, tmdbId, season, episode } = _parseStremioId(type, id);
 
@@ -44,7 +41,6 @@ const getMetadata = async (type, id) => {
         }
 
         const promises = [];
-
         if (tmdbId) {
             const tmdbUrl = `${tmdbConfig.baseUrl}/${type === 'movie' ? 'movie' : 'tv'}/${tmdbId}?api_key=${tmdbApiKey}&append_to_response=external_ids`;
             promises.push(_makeRequest(tmdbUrl));
@@ -71,12 +67,10 @@ const getMetadata = async (type, id) => {
     return metadata;
 };
 
-// --- Private Helper Functions ---
-
 const _makeRequest = async (url) => {
     try {
-        const response = await http.get(url);
-        return response.data;
+        const res = await http.get(url);
+        return res.data;
     } catch (error) {
         console.warn(`[API_SERVICE] Request to ${url} failed: ${error.message}`);
         return null;
@@ -87,9 +81,7 @@ const _populateFromTMDb = (metadata, tmdbData, type) => {
     if (!tmdbData) return;
     metadata.title = metadata.title || (type === 'movie' ? tmdbData.title : tmdbData.name);
     const releaseDate = type === 'movie' ? tmdbData.release_date : tmdbData.first_air_date;
-    if (releaseDate) {
-        metadata.year = metadata.year || new Date(releaseDate).getFullYear();
-    }
+    if (releaseDate) metadata.year = metadata.year || new Date(releaseDate).getFullYear();
     metadata.runtime = metadata.runtime || tmdbData.runtime || (tmdbData.episode_run_time ? tmdbData.episode_run_time : null);
     metadata.imdbId = metadata.imdbId || tmdbData.external_ids?.imdb_id;
 };
@@ -97,31 +89,20 @@ const _populateFromTMDb = (metadata, tmdbData, type) => {
 const _populateFromOMDb = (metadata, omdbData) => {
     if (!omdbData || omdbData.Response !== 'True') return;
     metadata.title = metadata.title || omdbData.Title;
-    if (omdbData.Year) {
-        metadata.year = metadata.year || parseInt(omdbData.Year.substring(0, 4));
-    }
-    if (omdbData.Runtime && omdbData.Runtime !== 'N/A') {
-        metadata.runtime = metadata.runtime || parseInt(omdbData.Runtime);
-    }
+    if (omdbData.Year) metadata.year = metadata.year || parseInt(omdbData.Year.substring(0, 4));
+    if (omdbData.Runtime && omdbData.Runtime !== 'N/A') metadata.runtime = metadata.runtime || parseInt(omdbData.Runtime);
 };
 
 const _parseStremioId = (type, id) => {
     const result = { imdbId: null, tmdbId: null, season: null, episode: null };
     const parts = id.split(':');
-    
-    if (id.startsWith('tt')) {
-        result.imdbId = parts;
-    } else {
-        result.tmdbId = parts;
-    }
-    
+    if (id.startsWith('tt')) result.imdbId = parts;
+    else result.tmdbId = parts;
     if (type === 'series') {
-        result.season = parts[1];
-        result.episode = parts[5];
+        result.season = parts[10];
+        result.episode = parts[11];
     }
     return result;
 };
 
-module.exports = {
-    getMetadata,
-};
+module.exports = { getMetadata };
