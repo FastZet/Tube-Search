@@ -1,28 +1,33 @@
 # syntax=docker/dockerfile:1
-FROM node:24-alpine
+FROM node:24-slim
 
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
+# Base packages
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install only production deps using layer caching
+# Dependencies first for better caching
 COPY package*.json ./
 RUN npm config set fund false && npm config set audit false \
  && if [ -f package-lock.json ] ; then npm ci --omit=dev ; else npm install --omit=dev ; fi
 
-# Copy the rest of the source and drop privileges
-COPY --chown=node:node . .
-USER node
+# Copy source as root (no chown needed when running as root)
+COPY . .
 
-# Match your server defaults
-ENV PORT=7870
-EXPOSE 7870
+# Optional: create /data in image; bind mount may overlay this at runtime
+RUN mkdir -p /data
 
-# Healthcheck hits your existing /health route
+# No USER instruction → default runtime user is root
+# USER root  # (implicit)
+
+ARG EXPOSE_PORT=7810
+ENV PORT=${EXPOSE_PORT}
+EXPOSE ${EXPOSE_PORT}
+
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD curl -fsS http://localhost:7870/health || exit 1
+  CMD curl -fsS "http://localhost:${PORT}/health" || exit 1
 
 # Start the server (e.g., via "npm start")
 CMD ["npm", "start"]
