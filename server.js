@@ -73,7 +73,12 @@ app.get('/:configString/stream/:type/:id.json', async (req, res) => {
     }
 });
 
-// Configuration UI routes (explicit, no optional token)
+// Root -> configure
+app.get('/', (req, res) => {
+    res.redirect('/configure');
+});
+
+// Configuration UI routes (explicit, no optional segment)
 app.get('/configure', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
@@ -90,8 +95,8 @@ app.get('/health', (req, res) => {
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 404 handler for any unhandled routes
-app.get('*', (req, res) => {
+// 404 handler for any unhandled routes (avoid "*" pattern incompatibilities)
+app.use((req, res) => {
     res.status(404).send('Not Found');
 });
 
