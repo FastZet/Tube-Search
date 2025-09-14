@@ -12,6 +12,7 @@
   "dependencies": {
     "axios": "^1.12.1",
     "express": "^5.1.0",
+    "morgan": "^1.10.1",
     "cheerio": "^1.1.2",
     "stremio-addon-sdk": "^1.6.10",
     "proxy-agent": "^6.5.0"
