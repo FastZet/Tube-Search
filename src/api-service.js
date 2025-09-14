@@ -1,9 +1,9 @@
 // src/api-service.js
 
-const axios = require('axios');
+const http = require('./http-client');
 const config = require('./config');
 
-const { tmdb: tmdbConfig, omdb: omdbConfig, defaultTimeout } = config.api;
+const { tmdb: tmdbConfig, omdb: omdbConfig } = config.api;
 
 /**
  * Fetches metadata from TMDb and OMDb APIs in parallel.
@@ -13,7 +13,6 @@ const { tmdb: tmdbConfig, omdb: omdbConfig, defaultTimeout } = config.api;
  * @returns {Promise<object>} A promise that resolves to a consolidated metadata object.
  */
 const getMetadata = async (type, id, apiKeys) => {
-    // CORRECTED: Added input validation as per your suggestion
     if (!apiKeys?.tmdbApiKey) {
         throw new Error('[API_SERVICE] getMetadata requires a tmdbApiKey.');
     }
@@ -36,10 +35,10 @@ const getMetadata = async (type, id, apiKeys) => {
         if (imdbId && !tmdbId) {
             const findUrl = `${tmdbConfig.baseUrl}/find/${imdbId}?api_key=${tmdbApiKey}&external_source=imdb_id`;
             const response = await _makeRequest(findUrl);
-            const results = type === 'movie' ? response.movie_results : response.tv_results;
+            const results = type === 'movie' ? response?.movie_results : response?.tv_results;
             if (results && results.length > 0) {
-                metadata.tmdbId = results[0].id;
-                tmdbId = results[0].id;
+                metadata.tmdbId = results.id;
+                tmdbId = results.id;
             }
         }
 
@@ -65,7 +64,6 @@ const getMetadata = async (type, id, apiKeys) => {
         _populateFromOMDb(metadata, omdbResult);
 
     } catch (error) {
-        // Log the error but still return the partially populated metadata object
         console.error(`[API_SERVICE] An error occurred during metadata fetching: ${error.message}`);
     }
 
@@ -76,7 +74,7 @@ const getMetadata = async (type, id, apiKeys) => {
 
 const _makeRequest = async (url) => {
     try {
-        const response = await axios.get(url, { timeout: defaultTimeout });
+        const response = await http.get(url);
         return response.data;
     } catch (error) {
         console.warn(`[API_SERVICE] Request to ${url} failed: ${error.message}`);
@@ -91,7 +89,7 @@ const _populateFromTMDb = (metadata, tmdbData, type) => {
     if (releaseDate) {
         metadata.year = metadata.year || new Date(releaseDate).getFullYear();
     }
-    metadata.runtime = metadata.runtime || tmdbData.runtime || (tmdbData.episode_run_time ? tmdbData.episode_run_time[0] : null);
+    metadata.runtime = metadata.runtime || tmdbData.runtime || (tmdbData.episode_run_time ? tmdbData.episode_run_time : null);
     metadata.imdbId = metadata.imdbId || tmdbData.external_ids?.imdb_id;
 };
 
@@ -111,14 +109,14 @@ const _parseStremioId = (type, id) => {
     const parts = id.split(':');
     
     if (id.startsWith('tt')) {
-        result.imdbId = parts[0];
+        result.imdbId = parts;
     } else {
-        result.tmdbId = parts[0];
+        result.tmdbId = parts;
     }
     
     if (type === 'series') {
         result.season = parts[1];
-        result.episode = parts[2];
+        result.episode = parts[22];
     }
     return result;
 };
