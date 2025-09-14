@@ -6,32 +6,18 @@
     <title>Tube Search Add-on Configuration</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #4A90E2;
-            --primary-dark: #357ABD;
-            --text-color: #333;
-            --light-text-color: #666;
-            --background-color: #f7f9fc;
-            --card-background: #ffffff;
-            --border-color: #e0e6ed;
-            --success-color: #28a745;
-            --info-color: #17a2b8;
-        }
-        body { font-family: 'Inter', sans-serif; background-color: var(--background-color); color: var(--text-color); margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; box-sizing: border-box; }
-        .container { background-color: var(--card-background); padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 100%; max-width: 550px; box-sizing: border-box; margin-top: 20px; }
+        :root { --primary-color:#4A90E2; --primary-dark:#357ABD; --text-color:#333; --light-text-color:#666; --background-color:#f7f9fc; --card-background:#fff; --border-color:#e0e6ed; --info-color:#17a2b8; }
+        body { font-family: 'Inter', sans-serif; background: var(--background-color); color: var(--text-color); margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; box-sizing: border-box; }
+        .container { background: var(--card-background); padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width:100%; max-width: 550px; margin-top: 20px; }
         h1 { color: var(--primary-color); text-align: center; margin-bottom: 30px; font-weight: 600; font-size: 1.8em; }
-        .info { background-color: #e6f7ff; border-left: 4px solid var(--info-color); padding: 15px; margin-bottom: 25px; border-radius: 6px; font-size: 0.95em; line-height: 1.5; color: var(--light-text-color); }
-        .info a { color: var(--info-color); text-decoration: none; font-weight: 600; }
-        .info a:hover { text-decoration: underline; }
+        .info { background: #e6f7ff; border-left: 4px solid var(--info-color); padding: 15px; margin-bottom: 25px; border-radius: 6px; font-size: 0.95em; color: var(--light-text-color); }
         label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--light-text-color); font-size: 0.9em; }
-        input[type="text"] { width: calc(100% - 24px); padding: 12px; margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1em; box-sizing: border-box; transition: border-color 0.3s ease, box-shadow 0.3s ease; }
-        input[type="text"]:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(74,144,226,0.2); outline: none; }
-        button { background-color: var(--primary-color); color: white; padding: 14px 25px; border: none; border-radius: 6px; cursor: pointer; font-size: 1.1em; font-weight: 600; width: 100%; transition: background-color 0.3s ease, box-shadow 0.3s ease; margin-top: 10px; }
-        button:hover { background-color: var(--primary-dark); box-shadow: 0 4px 15px rgba(74,144,226,0.3); }
-        #installUrl { margin-top: 30px; word-break: break-all; background-color: #e9f0f7; border: 1px dashed var(--primary-color); padding: 15px; border-radius: 6px; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 0.9em; text-align: left; display: none; color: var(--text-color); }
-        #installUrl code { display: block; background-color: #dde8f5; padding: 8px; border-radius: 4px; margin-top: 10px; font-weight: bold; }
-        .warning { color: #dc3545; font-weight: 600; margin-top: 10px; text-align: center; }
-        @media (max-width: 600px) { body { padding: 15px; align-items: flex-start; } .container { padding: 20px; margin-top: 15px; } h1 { font-size: 1.5em; margin-bottom: 20px; } input[type="text"], button { font-size: 0.95em; } .info { font-size: 0.85em; } .warning { font-size: 0.85em; } }
+        input[type="text"] { width: calc(100% - 24px); padding: 12px; margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1em; box-sizing: border-box; }
+        button { background: var(--primary-color); color: #fff; padding: 14px 25px; border: none; border-radius: 6px; cursor: pointer; font-size: 1.1em; font-weight: 600; width: 100%; }
+        button:hover { background: var(--primary-dark); }
+        #installUrl { margin-top: 30px; word-break: break-all; background: #e9f0f7; border: 1px dashed var(--primary-color); padding: 15px; border-radius: 6px; font-family: monospace; font-size: 0.9em; display: none; color: var(--text-color); }
+        #installUrl code { display: block; background: #dde8f5; padding: 8px; border-radius: 4px; margin-top: 10px; font-weight: bold; }
+        @media (max-width: 600px) { .container { padding: 20px; } h1 { font-size: 1.5em; } }
     </style>
 </head>
 <body>
@@ -39,12 +25,8 @@
         <h1>Tube Search Add-on Configuration</h1>
 
         <div class="info">
-            <p>This add-on now reads TMDb and OMDb API keys from server environment variables and no longer includes them in the URL path.</p>
-            <p>To install the add-on, enter the base64 <strong>Add-on Password</strong> configured on the server and use the generated link.</p>
-        </div>
-
-        <div class="warning">
-            <p><strong>Note:</strong> The password is required in the URL solely to authorize access to the manifest and streams. Keep it private.</p>
+            <p>The server reads TMDb and OMDb API keys from environment variables and protects the add-on with a base64 Add-on Password in the URL path.</p>
+            <p>Enter the Add-on Password to generate the exact install link for Stremio.</p>
         </div>
 
         <label for="addonPassword">Add-on Password (base64):</label>
@@ -58,29 +40,26 @@
     <script>
         function generateUrl() {
             const pwd = document.getElementById('addonPassword').value.trim();
-            if (!pwd) {
-                alert('Please enter the Add-on Password (ADDON_PASSWORD).');
-                return;
-            }
+            if (!pwd) { alert('Please enter the Add-on Password (ADDON_PASSWORD).'); return; }
             const baseUrl = window.location.origin;
-            const manifestUrl = `${baseUrl}/${pwd}/manifest.json`;
+            const manifestUrl = `${baseUrl}/${encodeURIComponent(pwd)}/manifest.json`;
             const installLink = `stremio://` + manifestUrl;
 
-            const installUrlDiv = document.getElementById('installUrl');
-            installUrlDiv.innerHTML = `
+            const el = document.getElementById('installUrl');
+            el.innerHTML = `
                 <p>Click to install in Stremio or copy the manifest URL:</p>
                 <p><a href="${installLink}">Install Tube Search Add-on</a></p>
                 <p>Manifest URL:</p>
                 <code>${manifestUrl}</code>
             `;
-            installUrlDiv.style.display = 'block';
+            el.style.display = 'block';
         }
 
-        // Optional: prefill password from the path (e.g., /<password>/configure)
+        // Prefill password from /<password>/configure
         window.onload = function() {
             const segs = window.location.pathname.split('/');
-            if (segs.length >= 2 && segs[1] && segs[1] !== 'configure') {
-                document.getElementById('addonPassword').value = decodeURIComponent(segs[1]);
+            if (segs.length >= 2 && segs[10] && segs[10] !== 'configure') {
+                try { document.getElementById('addonPassword').value = decodeURIComponent(segs[10]); } catch(e) {}
             }
         };
     </script>
