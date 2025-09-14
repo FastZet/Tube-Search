@@ -10,62 +10,45 @@ const app = express();
 
 // --- Middleware for CORS ---
 app.use((req, res, next) => {
-    // Using configured origins for better security in production
     res.setHeader('Access-Control-Allow-Origin', config.server.corsOrigins.join(', '));
     res.setHeader('Access-Control-Allow-Headers', '*');
     next();
 });
 
-/**
- * Helper function to parse the combined config string from the URL.
- * This is a web-layer responsibility.
- * @param {string} configString - The URL-encoded config string.
- * @returns {{tmdbApiKey: string, omdbApiKey: string}}
- */
-const parseConfigString = (configString) => {
-    const apiKeys = { tmdbApiKey: '', omdbApiKey: '' };
-    if (configString) {
-        try {
-            const decoded = decodeURIComponent(configString);
-            decoded.split('|').forEach(param => {
-                const [key, value] = param.split('=');
-                if (key === 'tmdb') apiKeys.tmdbApiKey = value;
-                else if (key === 'omdb') apiKeys.omdbApiKey = value;
-            });
-        } catch (e) {
-            console.error('[SERVER] Error decoding config string:', e.message);
-        }
+// Authorization helper using ADDON_PASSWORD
+const requirePassword = (req, res, next) => {
+    const expected = process.env.ADDON_PASSWORD || '';
+    const supplied = req.params.password || '';
+    if (!expected) {
+        return res.status(500).json({ err: 'Server not configured: missing ADDON_PASSWORD env var.' });
     }
-    return apiKeys;
+    if (supplied !== expected) {
+        return res.status(401).json({ err: 'Unauthorized: invalid addon password.' });
+    }
+    next();
 };
 
 // --- Route Definitions ---
 
 // Manifest route: Provides the addon configuration to Stremio
-app.get('/:configString/manifest.json', (req, res) => {
-    const { configString } = req.params;
-    const apiKeys = parseConfigString(configString);
-
-    if (!apiKeys.tmdbApiKey) {
-        return res.status(400).json({ err: 'TMDb API key is missing from the configuration URL.' });
+app.get('/:password/manifest.json', requirePassword, (req, res) => {
+    const tmdbKey = process.env.TMDB_API_KEY || '';
+    if (!tmdbKey) {
+        return res.status(500).json({ err: 'Server not configured: missing TMDB_API_KEY env var.' });
     }
 
-    // Create a dynamic manifest ID based on the user's keys to ensure uniqueness
-    const dynamicId = `${manifest.id}_${apiKeys.tmdbApiKey.substring(0, 5)}_${apiKeys.omdbApiKey.substring(0, 5) || 'na'}`;
+    const password = req.params.password;
+    const dynamicId = `${manifest.id}_${password.substring(0, 5)}`;
     const configuredManifest = { ...manifest, id: dynamicId, name: 'Tube Search' };
     
     res.json(configuredManifest);
 });
 
 // Stream route: The main endpoint for finding content
-app.get('/:configString/stream/:type/:id.json', async (req, res) => {
+app.get('/:password/stream/:type/:id.json', requirePassword, async (req, res) => {
     try {
-        const { configString, type, id } = req.params;
-        const apiKeys = parseConfigString(configString);
-        
-        // Delegate all business logic to the stream handler
-        const result = await streamHandler.getStreams(type, id, apiKeys);
-        
+        const { type, id } = req.params;
+        const result = await streamHandler.getStreams(type, id);
         res.json(result);
     } catch (error) {
         console.error(`[SERVER] Unhandled error in stream handler: ${error.message}`);
@@ -78,12 +61,12 @@ app.get('/', (req, res) => {
     res.redirect('/configure');
 });
 
-// Configuration UI routes (explicit, no optional segment)
+// Configuration UI routes (explicit, no optional token)
 app.get('/configure', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
-app.get('/:configString/configure', (req, res) => {
+app.get('/:anything/configure', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
@@ -95,7 +78,7 @@ app.get('/health', (req, res) => {
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 404 handler for any unhandled routes (avoid "*" pattern incompatibilities)
+// 404 handler for any unhandled routes (compatible with path-to-regexp)
 app.use((req, res) => {
     res.status(404).send('Not Found');
 });
