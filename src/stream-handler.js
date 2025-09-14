@@ -1,5 +1,4 @@
 // src/stream-handler.js
-
 const config = require('./config');
 const apiService = require('./api-service');
 const scraperService = require('./scraper-service');
@@ -7,15 +6,13 @@ const scoringService = require('./scoring-service');
 
 /**
  * Orchestrates the process of fetching metadata, scraping, and scoring to find streams.
- * @param {string} type - The content type ('movie' or 'series').
- * @param {string} id - The Stremio ID for the content.
- * @returns {Promise<{streams: Array}>} A promise that resolves to an object containing an array of stream objects.
+ * @param {string} type - 'movie' or 'series'.
+ * @param {string} id - Stremio ID.
+ * @returns {Promise<{streams: Array}>}
  */
 const getStreams = async (type, id) => {
     const start = Date.now();
-    if (!type || !id) {
-        throw new Error('[HANDLER] Invalid arguments: type and id are required.');
-    }
+    if (!type || !id) throw new Error('[HANDLER] Invalid arguments: type and id are required.');
 
     let metadata;
     let searchQueries = [];
@@ -38,9 +35,7 @@ const getStreams = async (type, id) => {
             }
         }
 
-        if (!metadata.title) {
-            throw new Error('Failed to retrieve a title for the content. Cannot proceed.');
-        }
+        if (!metadata.title) throw new Error('Failed to retrieve a title for the content. Cannot proceed.');
 
         searchQueries = _buildSearchQueries(metadata, type);
         console.log('[HANDLER] Step 2/5: Built search queries:');
@@ -48,7 +43,7 @@ const getStreams = async (type, id) => {
 
         console.log('[HANDLER] Step 3/5: Scraping Google for stream candidates...');
         const { allResults: scrapedResults, queryStats } = await scraperService.scrapeGoogleForStreams(searchQueries);
-        
+
         console.log(`[HANDLER] Step 3.1: Found ${scrapedResults.length} unique results.`);
         queryStats.forEach(stat => {
             console.log(`  - Query "${stat.query}" returned ${stat.count} results.`);
@@ -58,19 +53,16 @@ const getStreams = async (type, id) => {
             console.log('[HANDLER] Step 3.2: Full list of found titles:');
             scrapedResults.forEach((res, i) => console.log(`  ${i + 1}: ${res.title}`));
         }
-        
+
         console.log('\n[HANDLER] Step 4/5: Scoring results...');
         const scoredResults = scrapedResults
-            .map(result => ({
-                ...result,
-                scoreData: scoringService.calculateScore(result, metadata, type),
-            }))
+            .map(result => ({ ...result, scoreData: scoringService.calculateScore(result, metadata, type) }))
             .sort((a, b) => b.scoreData.score - a.scoreData.score);
-        
+
         const topResults = (scoredResults.length > 0 && scoredResults.scoreData.score > 0)
             ? scoredResults.slice(0, 2)
             : [];
-        
+
         if (config.logging.enableDetailedScoring) {
             console.log('\n[HANDLER] Step 4.1: Detailed scoring for top results:');
             scoredResults.slice(0, 5).forEach((result, index) => {
@@ -80,29 +72,27 @@ const getStreams = async (type, id) => {
                 console.log(`[HANDLER]   - Breakdown: ${breakdownLog}`);
             });
         }
-        
+
         if (topResults.length > 0) {
             console.log(`[HANDLER] Step 4.2: Final Selection: ${topResults.length} best streams selected.`);
         }
-        
+
         console.log('\n[HANDLER] Step 5/5: Formatting final streams for Stremio.');
-        if (topResults.length > 0) {
-            streams.push(...topResults.map(_formatStream));
-        }
+        if (topResults.length > 0) streams.push(...topResults.map(_formatStream));
 
     } catch (error) {
         console.error(`[HANDLER] An error occurred in the main stream handler: ${error.message}`);
     }
 
     streams.push(..._getFallbackStreams(metadata, type));
-    
+
     const duration = Date.now() - start;
     console.log(`[HANDLER] Request for ${type}:${id} completed in ${duration}ms. Returning ${streams.length} streams.`);
 
     return { streams };
 };
 
-// --- Private Helper Functions ---
+// --- Private Helpers ---
 
 const _formatBreakdownForLog = (breakdown) => {
     const formatted = {};
@@ -122,9 +112,7 @@ const _buildSearchQueries = (metadata, type) => {
         const paddedEpisode = String(metadata.episode).padStart(2, '0');
         const compactSE = `S${paddedSeason}E${paddedEpisode}`;
         queries.push(`${metadata.title} ${compactSE}`);
-        if (metadata.episodeTitle) {
-            queries.push(`${metadata.title} ${compactSE} ${metadata.episodeTitle}`);
-        }
+        if (metadata.episodeTitle) queries.push(`${metadata.title} ${compactSE} ${metadata.episodeTitle}`);
     }
     return queries;
 };
@@ -137,7 +125,7 @@ const _formatStream = (result) => {
         .replace(/\| Facebook/i, '')
         .trim()
         .replace(/[\s\-,|]+$/, '');
-    
+
     return {
         title: `[${result.source || 'Stream'}] ${cleanTitle}\n${result.duration ? `Duration: ${result.duration}` : ''}`,
         externalUrl: result.url,
@@ -147,10 +135,10 @@ const _formatStream = (result) => {
 
 const _getFallbackStreams = (metadata, type) => {
     if (!metadata || !metadata.title) {
-        return [{ 
-            title: '🔍 Metadata failed, click to search Google manually', 
+        return [{
+            title: '🔍 Metadata failed, click to search Google manually',
             externalUrl: 'https://google.com',
-            behaviorHints: { externalUrl: true } 
+            behaviorHints: { externalUrl: true }
         }];
     }
     const fallbacks = [];
