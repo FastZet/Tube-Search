@@ -82,6 +82,11 @@ app.get('/:configString?/configure', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
+// Liveness/health route for Docker healthcheck
+app.get('/health', (req, res) => {
+    res.json({ ok: true });
+});
+
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 

@@ -1,12 +1,14 @@
-name: Publish Docker image (stable release)
+name: Publish Docker image (nightly release)
 on:
   workflow_dispatch:
 permissions:
   contents: read
   packages: write
 jobs:
-  build-and-push:
+  build-and-push-devel:
     runs-on: ubuntu-latest
+    # Extra safety: skip if not running against the devel ref in UI
+    if: github.ref == 'refs/heads/devel' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,7 +23,10 @@ jobs:
       # Lowercase owner/repo for GHCR image path
       - name: Set lowercase image name
         run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
-      - name: Build and push
+      # Create nightly tag like 2025.09.12.1120-nightly (UTC)
+      - name: Create nightly tag
+        run: echo "VER_TAG=$(date -u +'%Y.%m.%d.%H%M-nightly')" >> $GITHUB_ENV
+      - name: Build and push (devel nightly)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -30,7 +35,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            EXPOSE_PORT=7810
+            EXPOSE_PORT=7820
           tags: |
-            ghcr.io/${{ env.REPO_LC }}:latest
-            ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}
+            ghcr.io/${{ env.REPO_LC }}:nightly
+            ghcr.io/${{ env.REPO_LC }}:${{ env.VER_TAG }}
