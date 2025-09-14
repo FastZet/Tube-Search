@@ -73,12 +73,12 @@ app.get('/:configString/stream/:type/:id.json', async (req, res) => {
     }
 });
 
-// Configuration UI routes
-app.get('/', (req, res) => {
-    res.redirect('/configure');
+// Configuration UI routes (explicit, no optional token)
+app.get('/configure', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
-app.get('/:configString?/configure', (req, res) => {
+app.get('/:configString/configure', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
