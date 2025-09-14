@@ -9,14 +9,15 @@ const { tmdb: tmdbConfig, omdb: omdbConfig } = config.api;
  * Fetches metadata from TMDb and OMDb APIs in parallel.
  * @param {string} type - The content type ('movie' or 'series').
  * @param {string} id - The Stremio ID (e.g., 'tt0414762:1:4').
- * @param {object} apiKeys - The API keys { tmdbApiKey, omdbApiKey }.
  * @returns {Promise<object>} A promise that resolves to a consolidated metadata object.
  */
-const getMetadata = async (type, id, apiKeys) => {
-    if (!apiKeys?.tmdbApiKey) {
-        throw new Error('[API_SERVICE] getMetadata requires a tmdbApiKey.');
+const getMetadata = async (type, id) => {
+    const tmdbApiKey = process.env.TMDB_API_KEY || '';
+    const omdbApiKey = process.env.OMDB_API_KEY || '';
+
+    if (!tmdbApiKey) {
+        throw new Error('[API_SERVICE] TMDB_API_KEY env var is required.');
     }
-    const { tmdbApiKey, omdbApiKey } = apiKeys;
 
     let { imdbId, tmdbId, season, episode } = _parseStremioId(type, id);
 
@@ -116,7 +117,7 @@ const _parseStremioId = (type, id) => {
     
     if (type === 'series') {
         result.season = parts[1];
-        result.episode = parts[22];
+        result.episode = parts[5];
     }
     return result;
 };
