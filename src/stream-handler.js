@@ -9,13 +9,12 @@ const scoringService = require('./scoring-service');
  * Orchestrates the process of fetching metadata, scraping, and scoring to find streams.
  * @param {string} type - The content type ('movie' or 'series').
  * @param {string} id - The Stremio ID for the content.
- * @param {object} apiKeys - The user's API keys { tmdbApiKey, omdbApiKey }.
  * @returns {Promise<{streams: Array}>} A promise that resolves to an object containing an array of stream objects.
  */
-const getStreams = async (type, id, apiKeys) => {
+const getStreams = async (type, id) => {
     const start = Date.now();
-    if (!type || !id || !apiKeys?.tmdbApiKey) {
-        throw new Error('[HANDLER] Invalid arguments: type, id, and tmdbApiKey are required.');
+    if (!type || !id) {
+        throw new Error('[HANDLER] Invalid arguments: type and id are required.');
     }
 
     let metadata;
@@ -26,7 +25,7 @@ const getStreams = async (type, id, apiKeys) => {
         console.log(`\n[HANDLER] ----- New Request Started: ${type} ${id} -----`);
 
         console.log('[HANDLER] Step 1/5: Starting metadata enrichment...');
-        metadata = await apiService.getMetadata(type, id, apiKeys);
+        metadata = await apiService.getMetadata(type, id);
 
         if (type === 'series' && metadata.imdbId) {
             console.log(`[HANDLER] Step 1.1: Scraping IMDb for S${metadata.season}E${metadata.episode} title...`);
@@ -68,8 +67,7 @@ const getStreams = async (type, id, apiKeys) => {
             }))
             .sort((a, b) => b.scoreData.score - a.scoreData.score);
         
-        // MODIFIED: Selecting the top 2 results as requested
-        const topResults = (scoredResults.length > 0 && scoredResults[0].scoreData.score > 0)
+        const topResults = (scoredResults.length > 0 && scoredResults.scoreData.score > 0)
             ? scoredResults.slice(0, 2)
             : [];
         
