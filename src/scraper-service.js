@@ -26,23 +26,29 @@ const scrapeGoogleForStreams = async (searchQueries) => {
             const $ = cheerio.load(response.data);
 
             $(selectors.resultItem.join(', ')).each((i, el) => {
-                const linkEl = selectFirst($, el, selectors.link);
-                let url = linkEl.attr('href');
+                try {
+                    const linkEl = selectFirst($, el, selectors.link);
+                    let url = linkEl.attr('href');
 
-                if (url && url.startsWith('/url?q=')) {
-                    url = new URLSearchParams(url.split('?')[10]).get('q');
-                }
-
-                if (url && url.startsWith('http') && !seenUrls.has(url)) {
-                    const title = selectFirst($, el, selectors.title).text().trim();
-                    const source = selectFirst($, el, selectors.source).text().split(' › ')[0].replace('www.', '').trim();
-                    const duration = selectFirst($, el, selectors.duration).text().trim();
-
-                    if (title) {
-                        allResults.push({ title, url, source, duration, index: i });
-                        seenUrls.add(url);
-                        resultsFromThisQuery++;
+                    if (url && url.startsWith('/url?q=')) {
+                        // Corrected: use index 1
+                        url = new URLSearchParams(url.split('?')[1]).get('q');
                     }
+
+                    if (url && url.startsWith('http') && !seenUrls.has(url)) {
+                        const title = selectFirst($, el, selectors.title).text().trim();
+                        // Corrected: take the first element before replacing
+                        const source = selectFirst($, el, selectors.source).text().split(' › ')[0].replace('www.', '').trim();
+                        const duration = selectFirst($, el, selectors.duration).text().trim();
+
+                        if (title) {
+                            allResults.push({ title, url, source, duration, index: i });
+                            seenUrls.add(url);
+                            resultsFromThisQuery++;
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`[SCRAPER_SERVICE] Failed to parse a Google result at index ${i}: ${error.message}`);
                 }
             });
         } catch (error) {
@@ -67,7 +73,7 @@ const scrapeImdbForEpisodeTitle = async (imdbId, season, episode) => {
         $('article.episode-item-wrapper').each((i, el) => {
             const titleElement = $(el).find('.ipc-title__text');
             const titleText = titleElement.text().trim();
-            
+
             const match = titleText.match(/^S(\d+)\.E(\d+)/);
             if (match) {
                 const scrapedSeason = parseInt(match[1], 10);
@@ -75,6 +81,7 @@ const scrapeImdbForEpisodeTitle = async (imdbId, season, episode) => {
                 if (scrapedSeason === parseInt(season, 10) && scrapedEpisode === parseInt(episode, 10)) {
                     const parts = titleText.split('∙');
                     if (parts.length > 1) {
+                        // Corrected: use index 1
                         foundTitle = parts[1].trim();
                         return false;
                     }
