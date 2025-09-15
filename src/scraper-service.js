@@ -35,7 +35,7 @@ const scrapeGoogleForStreams = async (searchQueries) => {
 
                 if (url && url.startsWith('http') && !seenUrls.has(url)) {
                     const title = selectFirst($, el, selectors.title).text().trim();
-                    const source = selectFirst($, el, selectors.source).text().split(' › ').replace('www.', '').trim();
+                    const source = selectFirst($, el, selectors.source).text().split(' › ')[0].replace('www.', '').trim();
                     const duration = selectFirst($, el, selectors.duration).text().trim();
 
                     if (title) {
