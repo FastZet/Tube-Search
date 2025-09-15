@@ -5,7 +5,7 @@ const config = {
     server: {
         port: process.env.PORT || 7860,
         // Restrict origins in production for better security
-        corsOrigins: process.env.NODE_ENV === 'production' ? ['https://your-production-domain.com'] : ['*'],
+        corsOrigins: ['*'],
     },
 
     // API and external service configurations
@@ -47,7 +47,7 @@ const config = {
 
     // Web scraping settings
     scraping: {
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
         googleSearchUrl: 'https://www.google.com/search',
         whitelistedDomains: [
             'youtube.com', 
