@@ -67,15 +67,15 @@ const scrapeImdbForEpisodeTitle = async (imdbId, season, episode) => {
         $('article.episode-item-wrapper').each((i, el) => {
             const titleElement = $(el).find('.ipc-title__text');
             const titleText = titleElement.text().trim();
-
+            
             const match = titleText.match(/^S(\d+)\.E(\d+)/);
             if (match) {
-                const scrapedSeason = parseInt(match[10], 10);
-                const scrapedEpisode = parseInt(match[11], 10);
+                const scrapedSeason = parseInt(match[1], 10);
+                const scrapedEpisode = parseInt(match[2], 10);
                 if (scrapedSeason === parseInt(season, 10) && scrapedEpisode === parseInt(episode, 10)) {
                     const parts = titleText.split('∙');
                     if (parts.length > 1) {
-                        foundTitle = parts[10].trim();
+                        foundTitle = parts[1].trim();
                         return false;
                     }
                 }
