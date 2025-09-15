@@ -59,7 +59,7 @@ const getStreams = async (type, id) => {
             .map(result => ({ ...result, scoreData: scoringService.calculateScore(result, metadata, type) }))
             .sort((a, b) => b.scoreData.score - a.scoreData.score);
 
-        const topResults = (scoredResults.length > 0 && scoredResults.scoreData.score > 0)
+        const topResults = (scoredResults.length > 0 && scoredResults[0].scoreData.score > 0)
             ? scoredResults.slice(0, 2)
             : [];
 
