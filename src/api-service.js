@@ -96,11 +96,14 @@ const _populateFromOMDb = (metadata, omdbData) => {
 const _parseStremioId = (type, id) => {
     const result = { imdbId: null, tmdbId: null, season: null, episode: null };
     const parts = id.split(':');
-    if (id.startsWith('tt')) result.imdbId = parts;
-    else result.tmdbId = parts;
-    if (type === 'series') {
-        result.season = parts[10];
-        result.episode = parts[11];
+    if (id.startsWith('tt')) {
+        result.imdbId = parts[0];
+    } else {
+        result.tmdbId = parts[0];
+    }
+    if (type === 'series' && parts.length === 3) {
+        result.season = parts[1];
+        result.episode = parts[2];
     }
     return result;
 };
