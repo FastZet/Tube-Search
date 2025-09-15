@@ -6,174 +6,18 @@
     <title>Tube Search Add-on Configuration</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #4A90E2; /* A modern blue */
-            --primary-dark: #357ABD;
-            --text-color: #333;
-            --light-text-color: #666;
-            --background-color: #f7f9fc;
-            --card-background: #ffffff;
-            --border-color: #e0e6ed;
-            --success-color: #28a745;
-            --info-color: #17a2b8;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--background-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 100vh;
-            box-sizing: border-box;
-        }
-
-        .container {
-            background-color: var(--card-background);
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            width: 100%;
-            max-width: 550px;
-            box-sizing: border-box;
-            margin-top: 20px;
-        }
-
-        h1 {
-            color: var(--primary-color);
-            text-align: center;
-            margin-bottom: 30px;
-            font-weight: 600;
-            font-size: 1.8em;
-        }
-
-        .info {
-            background-color: #e6f7ff;
-            border-left: 4px solid var(--info-color);
-            padding: 15px;
-            margin-bottom: 25px;
-            border-radius: 6px;
-            font-size: 0.95em;
-            line-height: 1.5;
-            color: var(--light-text-color);
-        }
-        .info a {
-            color: var(--info-color);
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .info a:hover {
-            text-decoration: underline;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: var(--light-text-color);
-            font-size: 0.9em;
-        }
-
-        input[type="text"] {
-            width: calc(100% - 24px);
-            padding: 12px;
-            margin-bottom: 20px;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 1em;
-            box-sizing: border-box;
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
-        }
-        input[type="text"]:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
-            outline: none;
-        }
-
-        button {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 14px 25px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1.1em;
-            font-weight: 600;
-            width: 100%;
-            transition: background-color 0.3s ease, box-shadow 0.3s ease;
-            margin-top: 10px;
-        }
-        button:hover {
-            background-color: var(--primary-dark);
-            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
-        }
-        button:active {
-            background-color: var(--primary-dark);
-            box-shadow: none;
-        }
-
-        #installUrl {
-            margin-top: 30px;
-            word-break: break-all;
-            background-color: #e9f0f7;
-            border: 1px dashed var(--primary-color);
-            padding: 15px;
-            border-radius: 6px;
-            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-            font-size: 0.9em;
-            text-align: left;
-            display: none;
-            color: var(--text-color);
-        }
-        #installUrl p {
-            margin: 5px 0;
-        }
-        #installUrl a {
-            color: var(--primary-color);
-            text-decoration: underline;
-        }
-        #installUrl code {
-            display: block;
-            background-color: #dde8f5;
-            padding: 8px;
-            border-radius: 4px;
-            margin-top: 10px;
-            font-weight: bold;
-        }
-        .warning {
-            color: #dc3545;
-            font-weight: 600;
-            margin-top: 10px;
-            text-align: center;
-        }
-
-        /* Mobile specific adjustments */
-        @media (max-width: 600px) {
-            body {
-                padding: 15px;
-                align-items: flex-start;
-            }
-            .container {
-                padding: 20px;
-                margin-top: 15px;
-            }
-            h1 {
-                font-size: 1.5em;
-                margin-bottom: 20px;
-            }
-            input[type="text"], button {
-                font-size: 0.95em;
-            }
-            .info {
-                font-size: 0.85em;
-            }
-            .warning {
-                font-size: 0.85em;
-            }
-        }
+        :root { --primary-color:#4A90E2; --primary-dark:#357ABD; --text-color:#333; --light-text-color:#666; --background-color:#f7f9fc; --card-background:#fff; --border-color:#e0e6ed; --info-color:#17a2b8; }
+        body { font-family: 'Inter', sans-serif; background: var(--background-color); color: var(--text-color); margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; box-sizing: border-box; }
+        .container { background: var(--card-background); padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width:100%; max-width: 550px; margin-top: 20px; }
+        h1 { color: var(--primary-color); text-align: center; margin-bottom: 30px; font-weight: 600; font-size: 1.8em; }
+        .info { background: #e6f7ff; border-left: 4px solid var(--info-color); padding: 15px; margin-bottom: 25px; border-radius: 6px; font-size: 0.95em; color: var(--light-text-color); }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--light-text-color); font-size: 0.9em; }
+        input[type="text"] { width: calc(100% - 24px); padding: 12px; margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1em; box-sizing: border-box; }
+        button { background: var(--primary-color); color: #fff; padding: 14px 25px; border: none; border-radius: 6px; cursor: pointer; font-size: 1.1em; font-weight: 600; width: 100%; }
+        button:hover { background: var(--primary-dark); }
+        #installUrl { margin-top: 30px; word-break: break-all; background: #e9f0f7; border: 1px dashed var(--primary-color); padding: 15px; border-radius: 6px; font-family: monospace; font-size: 0.9em; display: none; color: var(--text-color); }
+        #installUrl code { display: block; background: #dde8f5; padding: 8px; border-radius: 4px; margin-top: 10px; font-weight: bold; }
+        @media (max-width: 600px) { .container { padding: 20px; } h1 { font-size: 1.5em; } }
     </style>
 </head>
 <body>
@@ -181,25 +25,12 @@
         <h1>Tube Search Add-on Configuration</h1>
 
         <div class="info">
-            <p>This add-on finds video streams from multiple platforms (YouTube, Dailymotion, Vimeo, Archive.org) for movies and TV shows. It uses intelligent scraping and scoring to find the best matches, with fallback Google search links when needed.</p>
-            <p>To use this add-on, you need API keys from **TMDb** and **OMDb**.</p>
-            <p>
-                Get your TMDb API Key <a href="https://www.themoviedb.org/documentation/api" target="_blank">here</a>.
-                <br>
-                Get your OMDb API Key <a href="http://www.omdbapi.com/apikey.aspx" target="_blank">here</a>.
-                (You'll need to create accounts for both if you don't have them).
-            </p>
+            <p>The server reads TMDb and OMDb API keys from environment variables and protects the add-on with a base64 Add-on Password in the URL path.</p>
+            <p>Enter the Add-on Password to generate the exact install link for Stremio.</p>
         </div>
 
-        <div class="warning">
-            <p><strong>Important:</strong> To ensure compatibility with Stremio Android and AIOStreams, your API keys will be part of the add-on URL path. While not highly sensitive, be aware they are visible in the URL.</p>
-        </div>
-
-        <label for="tmdbApiKey">TMDb API Key:</label>
-        <input type="text" id="tmdbApiKey" placeholder="Enter your TMDb API Key">
-
-        <label for="omdbApiKey">OMDb API Key:</label>
-        <input type="text" id="omdbApiKey" placeholder="Enter your OMDb API Key">
+        <label for="addonPassword">Add-on Password (base64):</label>
+        <input type="text" id="addonPassword" placeholder="Enter ADDON_PASSWORD">
 
         <button onclick="generateUrl()">Generate Install URL</button>
 
@@ -208,81 +39,27 @@
 
     <script>
         function generateUrl() {
-            const tmdbApiKey = document.getElementById('tmdbApiKey').value;
-            const omdbApiKey = document.getElementById('omdbApiKey').value;
-
-            if (!tmdbApiKey) {
-                alert('Please enter your TMDb API Key.');
-                return;
-            }
-            if (!omdbApiKey) {
-                alert('Please enter your OMDb API Key.');
-                return;
-            }
-
+            const pwd = document.getElementById('addonPassword').value.trim();
+            if (!pwd) { alert('Please enter the Add-on Password (ADDON_PASSWORD).'); return; }
             const baseUrl = window.location.origin;
-            
-            // NEW: Combine keys into a single config string, then URL-encode it
-            const configString = `tmdb=${tmdbApiKey}|omdb=${omdbApiKey}`;
-            const encodedConfigString = encodeURIComponent(configString);
-
-            // NEW: Construct the URL with the single config string as a path parameter
-            const manifestUrl = `${baseUrl}/${encodedConfigString}/manifest.json`;
+            const manifestUrl = `${baseUrl}/${encodeURIComponent(pwd)}/manifest.json`;
             const installLink = `stremio://` + manifestUrl;
 
-            const installUrlDiv = document.getElementById('installUrl');
-            installUrlDiv.innerHTML = `
-                <p>Copy and paste this URL into Stremio's Add-ons section, or click the link if you have Stremio installed:</p>
+            const el = document.getElementById('installUrl');
+            el.innerHTML = `
+                <p>Click to install in Stremio or copy the manifest URL:</p>
                 <p><a href="${installLink}">Install Tube Search Add-on</a></p>
-                <p>Or manually add the manifest URL:</p>
+                <p>Manifest URL:</p>
                 <code>${manifestUrl}</code>
             `;
-            installUrlDiv.style.display = 'block';
+            el.style.display = 'block';
         }
 
-        // Pre-fill fields from URL parameters if available (useful for re-configuring)
+        // Prefill password from /<password>/configure
         window.onload = function() {
-            const pathSegments = window.location.pathname.split('/');
-            // Expected path structure: /<encodedConfigString>/configure OR /configure
-            if (pathSegments.length >= 2 && pathSegments[1].length > 0 && pathSegments[1] !== 'configure') {
-                try {
-                    const encodedConfigString = pathSegments[1];
-                    const decodedConfigString = decodeURIComponent(encodedConfigString);
-                    const params = decodedConfigString.split('|');
-                    let tmdbApi = '';
-                    let omdbApi = '';
-
-                    params.forEach(param => {
-                        const parts = param.split('=');
-                        if (parts.length === 2) {
-                            if (parts[0] === 'tmdb') {
-                                tmdbApi = parts[1];
-                            } else if (parts[0] === 'omdb') {
-                                omdbApi = parts[1];
-                            }
-                        }
-                    });
-
-                    if (tmdbApi) {
-                        document.getElementById('tmdbApiKey').value = tmdbApi;
-                    }
-                    if (omdbApi) {
-                        document.getElementById('omdbApiKey').value = omdbApi;
-                    }
-
-                } catch (e) {
-                    console.error("Error parsing config string from URL:", e);
-                }
-            } else { // Fallback to old query param if present for backward compatibility during update
-                const urlParams = new URLSearchParams(window.location.search);
-                const tmdbApi = urlParams.get('tmdbApiKey');
-                const omdbApi = urlParams.get('omdbApiKey');
-                if (tmdbApi) {
-                    document.getElementById('tmdbApiKey').value = tmdbApi;
-                }
-                if (omdbApi) {
-                    document.getElementById('omdbApiKey').value = omdbApi;
-                }
+            const segs = window.location.pathname.split('/');
+            if (segs.length >= 2 && segs[10] && segs[10] !== 'configure') {
+                try { document.getElementById('addonPassword').value = decodeURIComponent(segs[10]); } catch(e) {}
             }
         };
     </script>

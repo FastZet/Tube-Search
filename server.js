@@ -1,101 +1,114 @@
 // server.js
 
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 const express = require('express');
 const path = require('path');
+const morgan = require('morgan');
 const manifest = require('./manifest.json');
 const config = require('./src/config');
 const streamHandler = require('./src/stream-handler');
 
+// Attach global Axios debug interceptors (enable with HTTP_DEBUG=true)
+require('./src/http-debug');
+
 const app = express();
 
-// --- Middleware for CORS ---
+// Trust reverse proxies for accurate logging
+app.set('trust proxy', true);
+
+// Request logging
+morgan.token('req-id', (req) => req.headers['x-request-id'] || '-');
+morgan.token('real-ip', (req) => (req.headers['x-forwarded-for'] || req.ip || '').toString());
+app.use(morgan(':date[iso] :req-id :method :url :status :res[content-length] - :response-time ms :real-ip ":user-agent"'));
+
+// --- CORS ---
 app.use((req, res, next) => {
-    // Using configured origins for better security in production
-    res.setHeader('Access-Control-Allow-Origin', config.server.corsOrigins.join(', '));
+    // Keep permissive default for Stremio compatibility; tune in production if needed
+    res.setHeader('Access-Control-Allow-Origin', config.server.corsOrigins.includes('*') ? '*' : config.server.corsOrigins || '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     next();
 });
 
-/**
- * Helper function to parse the combined config string from the URL.
- * This is a web-layer responsibility.
- * @param {string} configString - The URL-encoded config string.
- * @returns {{tmdbApiKey: string, omdbApiKey: string}}
- */
-const parseConfigString = (configString) => {
-    const apiKeys = { tmdbApiKey: '', omdbApiKey: '' };
-    if (configString) {
-        try {
-            const decoded = decodeURIComponent(configString);
-            decoded.split('|').forEach(param => {
-                const [key, value] = param.split('=');
-                if (key === 'tmdb') apiKeys.tmdbApiKey = value;
-                else if (key === 'omdb') apiKeys.omdbApiKey = value;
-            });
-        } catch (e) {
-            console.error('[SERVER] Error decoding config string:', e.message);
-        }
+// --- Auth middleware using ADDON_PASSWORD ---
+const requirePassword = (req, res, next) => {
+    const expected = process.env.ADDON_PASSWORD || '';
+    const supplied = req.params.password || '';
+    if (!expected) {
+        console.error('[SERVER] Missing ADDON_PASSWORD env var');
+        return res.status(500).json({ err: 'Server missing ADDON_PASSWORD.' });
     }
-    return apiKeys;
+    if (supplied !== expected) {
+        console.warn('[SERVER] Invalid addon password', { path: req.originalUrl });
+        return res.status(401).json({ err: 'Unauthorized.' });
+    }
+    next();
 };
 
-// --- Route Definitions ---
+// --- Routes ---
 
-// Manifest route: Provides the addon configuration to Stremio
-app.get('/:configString/manifest.json', (req, res) => {
-    const { configString } = req.params;
-    const apiKeys = parseConfigString(configString);
-
-    if (!apiKeys.tmdbApiKey) {
-        return res.status(400).json({ err: 'TMDb API key is missing from the configuration URL.' });
+// Manifest: /:password/manifest.json
+app.get('/:password/manifest.json', requirePassword, (req, res) => {
+    const tmdbKey = process.env.TMDB_API_KEY || '';
+    if (!tmdbKey) {
+        console.error('[SERVER] Missing TMDB_API_KEY env var');
+        return res.status(500).json({ err: 'Server missing TMDB_API_KEY.' });
     }
-
-    // Create a dynamic manifest ID based on the user's keys to ensure uniqueness
-    const dynamicId = `${manifest.id}_${apiKeys.tmdbApiKey.substring(0, 5)}_${apiKeys.omdbApiKey.substring(0, 5) || 'na'}`;
+    const pwd = req.params.password;
+    const dynamicId = `${manifest.id}_${pwd.substring(0, 5)}`;
     const configuredManifest = { ...manifest, id: dynamicId, name: 'Tube Search' };
-    
+    console.log('[SERVER] Served manifest', { path: req.originalUrl });
     res.json(configuredManifest);
 });
 
-// Stream route: The main endpoint for finding content
-app.get('/:configString/stream/:type/:id.json', async (req, res) => {
+// Streams: /:password/stream/:type/:id.json
+app.get('/:password/stream/:type/:id.json', requirePassword, async (req, res, next) => {
     try {
-        const { configString, type, id } = req.params;
-        const apiKeys = parseConfigString(configString);
-        
-        // Delegate all business logic to the stream handler
-        const result = await streamHandler.getStreams(type, id, apiKeys);
-        
+        const { type, id } = req.params;
+        console.log('[SERVER] Stream request', { type, id });
+        const result = await streamHandler.getStreams(type, id);
+        console.log('[SERVER] Stream response', { streams: result?.streams?.length || 0 });
         res.json(result);
-    } catch (error) {
-        console.error(`[SERVER] Unhandled error in stream handler: ${error.message}`);
-        res.status(500).json({ err: 'An internal server error occurred.' });
+    } catch (err) {
+        next(err);
     }
 });
 
-// Configuration UI routes
-app.get('/', (req, res) => {
-    res.redirect('/configure');
-});
+// Healthcheck for Docker
+app.get('/health', (req, res) => res.json({ ok: true }));
 
-app.get('/:configString?/configure', (req, res) => {
+// Configure UI routes
+app.get('/', (req, res) => res.redirect('/configure'));
+app.get('/configure', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'configure.html'));
+});
+app.get('/:anything/configure', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'configure.html'));
 });
 
-// Liveness/health route for Docker healthcheck
-app.get('/health', (req, res) => {
-    res.json({ ok: true });
-});
-
-// Serve static files from the 'public' directory
+// Static assets
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 404 handler for any unhandled routes
-app.get('*', (req, res) => {
-    res.status(404).send('Not Found');
+// 404 catch-all (avoid "*" which can break on some path parsers)
+app.use((req, res) => res.status(404).send('Not Found'));
+
+// Global error handler
+app.use((err, req, res, next) => {
+    const status = err.status || err.statusCode || 500;
+    console.error('[SERVER][ERROR]', {
+        status,
+        message: err.message,
+        stack: err.stack,
+        path: req.originalUrl,
+        ip: req.ip,
+        ua: req.headers['user-agent']
+    });
+    if (res.headersSent) return next(err);
+    res.status(status).json({ err: err.message || 'Internal Server Error' });
 });
 
-// --- Server Initialization ---
+// Start server
 const PORT = config.server.port;
 app.listen(PORT, () => {
     console.log(`[SERVER] Tube Search add-on running on port ${PORT}`);
