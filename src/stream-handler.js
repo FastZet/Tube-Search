@@ -4,57 +4,49 @@ const apiService = require('./api-service');
 const scraperService = require('./scraper-service');
 const scoringService = require('./scoring-service');
 
-/**
- * Orchestrates the process of fetching metadata, scraping, and scoring to find streams.
- * @param {string} type - 'movie' or 'series'.
- * @param {string} id - Stremio ID.
- * @returns {Promise<{streams: Array}>}
- */
 const getStreams = async (type, id) => {
     const start = Date.now();
-    if (!type || !id) throw new Error('[HANDLER] Invalid arguments: type and id are required.');
+    console.log(`\n[HANDLER] ----- New Request Started: ${type} ${id} -----`);
+    
+    // Logger object to manage chronological steps
+    const log = {
+        stepCounter: 1,
+        step: function(message) {
+            console.log(`[HANDLER] Step ${this.stepCounter++}: ${message}`);
+        }
+    };
 
     let metadata;
-    let searchQueries = [];
     let streams = [];
 
     try {
-        console.log(`\n[HANDLER] ----- New Request Started: ${type} ${id} -----`);
-
-        console.log('[HANDLER] Step 1/5: Starting metadata enrichment...');
-        metadata = await apiService.getMetadata(type, id);
+        log.step('Starting metadata enrichment process...');
+        metadata = await apiService.getMetadata(type, id, log);
+        log.step(`Successfully retrieved base metadata. Title: "${metadata.title}", Year: ${metadata.year || 'N/A'}`);
 
         if (type === 'series' && metadata.imdbId) {
-            console.log(`[HANDLER] Step 1.1: Scraping IMDb for S${metadata.season}E${metadata.episode} title...`);
+            log.step(`Scraping IMDb for S${metadata.season}E${metadata.episode} episode title...`);
             const imdbEpisodeTitle = await scraperService.scrapeImdbForEpisodeTitle(metadata.imdbId, metadata.season, metadata.episode);
             if (imdbEpisodeTitle) {
                 metadata.episodeTitle = imdbEpisodeTitle;
-                console.log(`[HANDLER] Step 1.2: Success! Found episode title from IMDb: "${metadata.episodeTitle}"`);
+                log.step(`Success! Found episode title from IMDb: "${metadata.episodeTitle}"`);
             } else {
-                console.log('[HANDLER] Step 1.2: IMDb scrape failed or returned no title. Proceeding without it.');
+                log.step('IMDb scrape failed or returned no title. Proceeding without it.');
             }
         }
 
-        if (!metadata.title) throw new Error('Failed to retrieve a title for the content. Cannot proceed.');
+        const searchQueries = _buildSearchQueries(metadata, type);
+        log.step('Building search queries...');
+        searchQueries.forEach((q, i) => console.log(`  - Query ${i + 1}: ${q}`));
 
-        searchQueries = _buildSearchQueries(metadata, type);
-        console.log('[HANDLER] Step 2/5: Built search queries:');
-        searchQueries.forEach((q, i) => console.log(`  ${i + 1}: ${q}`));
-
-        console.log('[HANDLER] Step 3/5: Scraping Google for stream candidates...');
+        log.step('Scraping Google for stream candidates...');
         const { allResults: scrapedResults, queryStats } = await scraperService.scrapeGoogleForStreams(searchQueries);
-
-        console.log(`[HANDLER] Step 3.1: Found ${scrapedResults.length} unique results.`);
+        log.step(`Found ${scrapedResults.length} unique results from Google.`);
         queryStats.forEach(stat => {
             console.log(`  - Query "${stat.query}" returned ${stat.count} results.`);
         });
 
-        if (config.logging.enableDetailedScoring) {
-            console.log('[HANDLER] Step 3.2: Full list of found titles:');
-            scrapedResults.forEach((res, i) => console.log(`  ${i + 1}: ${res.title}`));
-        }
-
-        console.log('\n[HANDLER] Step 4/5: Scoring results...');
+        log.step('Scoring results...');
         const scoredResults = scrapedResults
             .map(result => ({ ...result, scoreData: scoringService.calculateScore(result, metadata, type) }))
             .sort((a, b) => b.scoreData.score - a.scoreData.score);
@@ -62,32 +54,35 @@ const getStreams = async (type, id) => {
         const topResults = (scoredResults.length > 0 && scoredResults[0].scoreData.score > 0)
             ? scoredResults.slice(0, 2)
             : [];
+        
+        log.step(`Scoring complete. Selected ${topResults.length} result(s) with a score > 0.`);
 
-        if (config.logging.enableDetailedScoring) {
-            console.log('\n[HANDLER] Step 4.1: Detailed scoring for top results:');
+        if (config.logging.enableDetailedScoring && scoredResults.length > 0) {
+            console.log('\n[HANDLER] Detailed scoring for top 5 results:');
             scoredResults.slice(0, 5).forEach((result, index) => {
                 const breakdownLog = _formatBreakdownForLog(result.scoreData.breakdown);
-                console.log(`[HANDLER] --- Result ${index + 1}: "${result.title}" ---`);
-                console.log(`[HANDLER]   - Final Score: ${result.scoreData.score.toFixed(2)}`);
-                console.log(`[HANDLER]   - Breakdown: ${breakdownLog}`);
+                console.log(`  --- Result ${index + 1}: "${result.title}" ---`);
+                console.log(`    - Final Score: ${result.scoreData.score.toFixed(2)}`);
+                console.log(`    - Breakdown: ${breakdownLog}`);
             });
+            console.log('');
         }
 
+        log.step('Formatting final streams for Stremio...');
         if (topResults.length > 0) {
-            console.log(`[HANDLER] Step 4.2: Final Selection: ${topResults.length} best streams selected.`);
+            streams.push(...topResults.map(_formatStream));
         }
-
-        console.log('\n[HANDLER] Step 5/5: Formatting final streams for Stremio.');
-        if (topResults.length > 0) streams.push(...topResults.map(_formatStream));
 
     } catch (error) {
-        console.error(`[HANDLER] An error occurred in the main stream handler: ${error.message}`);
+        // This block will now catch ANY error from the metadata/scraping process
+        console.error(`[HANDLER] A critical error occurred: ${error.message}`);
+        console.error('[HANDLER] The process was halted. Returning fallback streams.');
     }
 
     streams.push(..._getFallbackStreams(metadata, type));
 
     const duration = Date.now() - start;
-    console.log(`[HANDLER] Request for ${type}:${id} completed in ${duration}ms. Returning ${streams.length} streams.`);
+    log.step(`Request completed in ${duration}ms. Returning ${streams.length} total streams.`);
 
     return { streams };
 };
