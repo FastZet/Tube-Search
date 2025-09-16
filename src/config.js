@@ -18,6 +18,7 @@ const config = {
         },
         imdb: {
             episodesUrl: (imdbId, season) => `https://www.imdb.com/title/${imdbId}/episodes?season=${season}`,
+            titleUrl: (imdbId) => `https://www.imdb.com/title/${imdbId}/`,
         },
         // Default timeout for all external HTTP requests
         defaultTimeout: 8000, // 8 seconds
@@ -67,10 +68,35 @@ const config = {
                 duration: ['.c8rnLc span, .O1CVkc'],
             },
             imdb: {
+                // Episode list selectors (existing)
                 episodeListItem: ['div.list_item'],
                 episodeNumber: ['meta[itemprop="episodeNumber"]'],
                 episodeTitle: ['a[itemprop="name"]'],
+                // Title page selectors (new for enhanced scraping)
+                title: [
+                    'h1[data-testid="hero__pageTitle"] span.hero__primary-text',
+                    'h1.sc-afe43def-0',
+                    'h1[data-testid="hero-title-block__title"]',
+                    'h1 .titlereference-title-link',
+                    'h1'
+                ],
+                year: [
+                    'span.sc-afe43def-1',
+                    'ul[data-testid="hero-title-block__metadata"] li.ipc-inline-list__item:first-child a',
+                    'ul[data-testid="hero-title-block__metadata"] li:first-child',
+                    'a[title*="See more release dates"]'
+                ],
+                runtime: [
+                    'li[data-testid="title-techspec_runtime"] div.ipc-metadata-list-item__content-container',
+                    'time[datetime]'
+                ]
             },
+        },
+        // Retry configuration for scraping operations
+        retries: {
+            maxAttempts: 3,
+            delayMs: 2000,
+            backoffMultiplier: 1.5, // Exponential backoff: 2s, 3s, 4.5s
         },
     },
 
@@ -90,6 +116,24 @@ const config = {
         tolerances: {
             MOVIE_DURATION_MINS: 20,
             SERIES_DURATION_MINS: 3,
+        },
+        // Minimum score thresholds
+        thresholds: {
+            MINIMUM_VIABLE_SCORE: -5, // Results below this are rarely useful
+            EXCELLENT_SCORE: 10, // Results above this are very likely correct
+        },
+    },
+
+    // Metadata fallback configuration
+    metadata: {
+        fallback: {
+            // Use current year as fallback when year extraction fails
+            useCurrentYear: true,
+            // Default runtime estimates (in minutes)
+            defaultRuntime: {
+                movie: 120,
+                series: 45,
+            },
         },
     },
 };
