@@ -5,6 +5,34 @@ const config = require('./config');
 const { tmdb: tmdbConfig, omdb: omdbConfig } = config.api;
 
 /**
+ * A resilient request function that retries on failure.
+ * @param {string} url The URL to request.
+ * @returns {Promise<object>} The response data.
+ */
+const _makeRequest = async (url) => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 2000; // 2 seconds in ms
+
+    let lastError;
+
+    for (let i = 0; i < MAX_RETRIES; i++) {
+        try {
+            const res = await http.get(url);
+            return res.data; // Success, return immediately
+        } catch (error) {
+            lastError = error;
+            console.warn(`[API_SERVICE] Attempt ${i + 1} of ${MAX_RETRIES} failed for ${url}: ${error.message}`);
+            if (i < MAX_RETRIES - 1) {
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            }
+        }
+    }
+    // If all retries failed, throw the last captured error
+    console.error(`[API_SERVICE] All ${MAX_RETRIES} attempts failed for ${url}.`);
+    throw lastError;
+};
+
+/**
  * Fetches metadata from TMDb and OMDb APIs in parallel.
  * This function will now throw an error if any critical API fails.
  * @param {string} type - 'movie' or 'series'.
@@ -81,17 +109,6 @@ const getMetadata = async (type, id, log) => {
     }
 
     return metadata;
-};
-
-const _makeRequest = async (url) => {
-    try {
-        const res = await http.get(url);
-        return res.data;
-    } catch (error) {
-        console.error(`[API_SERVICE] Request to ${url} failed: ${error.message}`);
-        // Re-throw the error to be caught by the main handler
-        throw error;
-    }
 };
 
 const _populateFromTMDb = (metadata, tmdbData, type) => {
