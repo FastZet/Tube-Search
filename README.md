@@ -15,7 +15,7 @@ This addon is designed for security and robustness, using server-side environmen
     *   **Word-based Title Matching:** Smartly compares titles by word overlap.
     *   **Duration Matching:** Prioritizes videos with a runtime close to the official one.
 *   **Multi-source Discovery:** Scrapes Google's video search, which indexes YouTube, Dailymotion, Vimeo, Archive.org, and more.
-*   **Resilient Fallbacks:** If no high-scoring results are found, the add-on provides direct Google search links so you are never left with a dead end.
+*   **Multi-Source Resilience:** Advanced fallback system tries TMDb → OMDb → IMDb scraping → Emergency fallback, ensuring you always get results even during API outages.
 *   **Easy Install UI:** A simple `/configure` page generates the exact Stremio install URL based on your addon password.
 *   **Advanced Logging:** Built-in support for detailed request and HTTP debugging logs for easy troubleshooting.
 
@@ -25,7 +25,11 @@ This addon is designed for security and robustness, using server-side environmen
 
 1.  **Request:** Stremio requests streams from the addon at `/:password/stream/:type/:id`.
 2.  **Authentication:** The server validates the `:password` from the URL against the `ADDON_PASSWORD` environment variable.
-3.  **Fetch Metadata:** The **API Service** fetches metadata (title, year, runtime) from TMDb/OMDb using the secure server-side API keys.
+3.  **Fetch Metadata:** The **API Service** attempts multiple sources in sequence:
+    - TMDb API (preferred) for complete metadata
+    - OMDb API (backup) for basic movie/series info  
+    - IMDb web scraping (fallback) for title and year extraction
+    - Emergency fallback (last resort) generates searchable metadata
 4.  **Enrich Data (Series):** For TV shows, the **Scraper Service** scrapes IMDb for the specific episode title to improve search accuracy.
 5.  **Scrape Google:** The **Scraper Service** builds precise search queries and scrapes Google's video search for potential streams.
 6.  **Score and Rank:** The **Scoring Service** calculates a confidence score for each result based on title match, duration, and other factors.
@@ -47,7 +51,7 @@ Deploy the addon using Docker or another Node.js hosting method. You **must** co
 | `PORT` | Optional | The port the addon server will run on. | `7810` |
 | `ADDON_PASSWORD` | **Yes** | A secret password you create. This protects your addon and is used in the installation URL. | `my_super_secret_password` |
 | `TMDB_API_KEY` | **Yes** | Your API key from [The Movie Database (TMDb)](https://www.themoviedb.org/documentation/api). | `a1b2c3d4e5f6g7h8i9j0` |
-| `OMDB_API_KEY` | Optional | Your API key from [OMDb API](http://www.omdbapi.com/apikey.aspx). Improves metadata matching. | `12345678` |
+| `OMDB_API_KEY` | Optional | Your API key from [OMDb API](http://www.omdbapi.com/apikey.aspx). **Highly recommended** as a backup when TMDb fails. | `12345678` |
 | `HTTP_DEBUG` | Optional | Set to `true` to enable verbose logging of all outbound API and scraper requests for troubleshooting. | `true` |
 | `ADDON_PROXY` | Optional | A proxy URL for all outbound traffic (e.g., for routing through a VPN). | `http://user:pass@host:port` |
 
@@ -114,6 +118,23 @@ sequenceDiagram
     ├── package.json
     └── Dockerfile
 ```
+
+---
+
+## 🔧 Troubleshooting
+
+### Enhanced Logging
+Set `HTTP_DEBUG=true` to enable detailed request/response logging for all API calls and scraping operations.
+
+### Metadata Sources
+The addon tries multiple sources automatically:
+1. **TMDb API** (requires API key) - Most reliable, complete metadata
+2. **OMDb API** (optional but recommended) - Good backup source  
+3. **IMDb Scraping** (always available) - Extracts basic title/year info
+4. **Emergency Fallback** (always works) - Creates searchable metadata from ID
+
+### Connection Issues
+If you see "ECONNRESET" or timeout errors, the addon will automatically try alternative sources. No manual intervention needed.
 
 ---
 
