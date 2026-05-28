@@ -4,13 +4,13 @@ FROM node:24-slim
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Removed: chromium, fonts-liberation (no longer needed for Google scraping)
-# Kept:    python3 (yt-dlp dep), ffmpeg, curl, ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates python3 ffmpeg \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
        -o /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp \
+    # Self-update at build time so extractors are always fresh
+    && /usr/local/bin/yt-dlp -U \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
