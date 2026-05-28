@@ -6,6 +6,8 @@ WORKDIR /app
 
 # Base packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    fonts-liberation \
     curl ca-certificates python3 ffmpeg \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
        -o /usr/local/bin/yt-dlp \
