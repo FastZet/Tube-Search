@@ -5,7 +5,11 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # Base packages
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates python3 ffmpeg \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+       -o /usr/local/bin/yt-dlp \
+    && chmod +x /usr/local/bin/yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
 # Dependencies first for better caching
