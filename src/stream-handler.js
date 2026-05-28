@@ -3,6 +3,7 @@ const config = require('./config');
 const apiService = require('./api-service');
 const scraperService = require('./scraper-service');
 const scoringService = require('./scoring-service');
+const { resolveDirectUrl } = require('./url-resolver');
 
 const getStreams = async (type, id) => {
     const start = Date.now();
@@ -93,7 +94,14 @@ const getStreams = async (type, id) => {
 
             log.step('Formatting streams for Stremio...');
             if (topResults.length > 0) {
-                streams.push(...topResults.map(result => _formatStream(result, metadata)));
+                log.step(`Resolving direct URLs for ${topResults.length} result(s) via yt-dlp...`);
+                const resolved = await Promise.all(
+                    topResults.map(async (result) => {
+                        const directUrl = await resolveDirectUrl(result.url);
+                        return _formatStream(result, metadata, directUrl);
+                    })
+                );
+                streams.push(...resolved);
             }
         } else {
             log.step('No results from scraping. Will rely entirely on fallback streams.');
@@ -193,7 +201,7 @@ const _buildSearchQueries = (metadata, type) => {
     return queries;
 };
 
-const _formatStream = (result, metadata) => {
+const _formatStream = (result, metadata, directUrl = null) => {
     let cleanTitle = result.title
         .replace(/ - video Dailymotion/i, '')
         .replace(/\| YouTube/i, '')
@@ -203,15 +211,25 @@ const _formatStream = (result, metadata) => {
         .trim()
         .replace(/[\s\-,|]+$/, '');
 
-    // Enhanced stream title with better formatting
     const sourceTag = `[${result.source || 'Stream'}]`;
     const durationInfo = result.duration ? `Duration: ${result.duration}` : '';
     const scoreInfo = result.scoreData ? `Score: ${result.scoreData.score.toFixed(1)}` : '';
-    
-    let subtitle = [durationInfo, scoreInfo].filter(Boolean).join(' • ');
-    
+    const subtitle = [durationInfo, scoreInfo].filter(Boolean).join(' • ');
+    const titleLine = `${sourceTag} ${cleanTitle}${subtitle ? `\n${subtitle}` : ''}`;
+
+    if (directUrl) {
+        // Direct playable URL — works in Nuvio AND Stremio
+        return {
+            title: titleLine,
+            url: directUrl,
+            behaviorHints: { bingeGroup: 'tube-search' },
+        };
+    }
+
+    // yt-dlp failed — fall back to externalUrl (Stremio desktop only)
+    console.warn(`[STREAM_HANDLER] No direct URL resolved, falling back to externalUrl: ${result.url}`);
     return {
-        title: `${sourceTag} ${cleanTitle}${subtitle ? `\n${subtitle}` : ''}`,
+        title: `${titleLine}\n⚠️ External link only`,
         externalUrl: result.url,
         behaviorHints: { externalUrl: true },
     };
