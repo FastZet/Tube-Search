@@ -64,10 +64,11 @@ const scrapeImdbForEpisodeTitle = async (imdbId, season, episode) => {
     const { userAgent } = config.scraping;
 
     try {
-        const response = await http.get(url, {
-            headers: { 'User-Agent': userAgent, 'Accept-Language': 'en-US,en;q=0.5' },
-        });
-        const $ = cheerio.load(response.data);
+        const { fetchRenderedPage } = require('./browser');
+
+        const html = await fetchRenderedPage(url, 'a[href*="youtube.com"], div.g');
+        if (!html) return []; // bail out cleanly if browser failed
+        const $ = cheerio.load(html);
         let foundTitle = null;
 
         $('article.episode-item-wrapper').each((i, el) => {
