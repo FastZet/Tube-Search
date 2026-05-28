@@ -1,96 +1,64 @@
 // src/diagnostics.js
-const { fetchRenderedPage } = require('./browser');
-const config = require('./config');
-const cheerio = require('cheerio');
+// Tests the Serper API key instead of hitting Google with Chromium.
 
-/**
- * Runs a real Google video search using headless Chromium and diagnoses
- * exactly why scraping may be returning 0 results.
- */
 const checkGoogleAccess = async () => {
-    const testQuery = 'Inception 2010 full movie';
-    const url = `${config.scraping.googleSearchUrl}?q=${encodeURIComponent(testQuery)}&tbm=vid&tbs=dur:l`;
+    const apiKey = process.env.SERPER_API_KEY;
 
     console.log('[DIAGNOSTICS] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('[DIAGNOSTICS] Google scrape diagnostic starting...');
-    console.log(`[DIAGNOSTICS] Test URL: ${url}`);
+    console.log('[DIAGNOSTICS] Serper API diagnostic starting...');
+
+    if (!apiKey) {
+        console.error('[DIAGNOSTICS] ❌ RESULT: SERPER_API_KEY env variable is not set');
+        console.error('[DIAGNOSTICS] Fix: Add SERPER_API_KEY=<your_key> to your environment');
+        console.log('[DIAGNOSTICS] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        return { ok: false, reason: 'no_api_key' };
+    }
+
+    const testQuery = 'Inception 2010 full movie';
+    console.log(`[DIAGNOSTICS] Test query: "${testQuery}"`);
 
     try {
-        const html = await fetchRenderedPage(url, 'a[href*="youtube.com"], div.g');
+        const http = require('./http-client');
+        const response = await http.post(
+            'https://google.serper.dev/videos',
+            JSON.stringify({ q: testQuery, tbs: 'dur:l', num: 5 }),
+            {
+                headers: {
+                    'X-API-KEY':    apiKey,
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
 
-        if (!html) {
-            console.error('[DIAGNOSTICS] ❌ RESULT: Chromium failed to fetch the page — browser may have crashed');
-            return { ok: false, reason: 'browser_failed' };
-        }
-
-        const body = html;
-        const snippet = body.substring(0, 800).replace(/\s+/g, ' ');
-
-        console.log(`[DIAGNOSTICS] Response size: ${body.length} bytes`);
-
-        // --- Check 1: CAPTCHA / unusual traffic page ---
-        const isCaptcha =
-            body.includes('detected unusual traffic') ||
-            body.includes('our systems have detected') ||
-            body.includes('/sorry/index') ||
-            body.includes('recaptcha') ||
-            body.toLowerCase().includes('captcha');
-
-        if (isCaptcha) {
-            console.error('[DIAGNOSTICS] ❌ RESULT: CAPTCHA — Google flagged this IP even with a real browser');
-            console.error('[DIAGNOSTICS] Fix: Use a residential proxy via ADDON_PROXY env variable');
-            console.error(`[DIAGNOSTICS] Response snippet: ${snippet}`);
-            return { ok: false, reason: 'captcha' };
-        }
-
-        // --- Check 2: JS rendered fine but selectors find nothing ---
-        const $ = cheerio.load(body);
-
-        const videoLinks = $('a[href]').filter((_, el) => {
-            const href = $(el).attr('href') || '';
-            return (
-                href.includes('youtube.com/watch') ||
-                href.includes('dailymotion.com/video') ||
-                href.includes('vimeo.com/') ||
-                href.includes('archive.org/details')
-            );
+        const videos = response.data?.videos || [];
+        console.log(`[DIAGNOSTICS] ✅ RESULT: Serper API working — ${videos.length} video(s) returned`);
+        videos.slice(0, 3).forEach((v, i) => {
+            console.log(`[DIAGNOSTICS]   [${i + 1}] ${v.title} → ${v.link}`);
         });
-
-        const scraperResults = $('div.g, div[data-ved], div.MjjYud').filter((_, el) => {
-            const text = $(el).text();
-            return text.length > 10;
-        });
-
-        console.log(`[DIAGNOSTICS] Raw video platform links found in page: ${videoLinks.length}`);
-        console.log(`[DIAGNOSTICS] Scraper-style result containers found: ${scraperResults.length}`);
-
-        if (videoLinks.length === 0 && scraperResults.length === 0) {
-            console.error('[DIAGNOSTICS] ❌ RESULT: SELECTOR MISMATCH — JS rendered fine but zero video links found');
-            console.error('[DIAGNOSTICS] Google likely changed their HTML structure — scraper selectors need updating');
-            console.error(`[DIAGNOSTICS] Response snippet: ${snippet}`);
-            return { ok: false, reason: 'selector_mismatch' };
+        if (videos.length === 0) {
+            console.warn('[DIAGNOSTICS] ⚠️  API responded but returned 0 results for test query');
         }
 
-        if (videoLinks.length > 0) {
-            console.log(`[DIAGNOSTICS] ✅ RESULT: Google access is working fine`);
-            videoLinks.slice(0, 5).each((_, el) => {
-                console.log(`[DIAGNOSTICS]   Found link: ${$(el).attr('href')}`);
-            });
-            return { ok: true, videoLinksFound: videoLinks.length };
-        }
-
-        // Containers found but no video platform links
-        console.warn('[DIAGNOSTICS] ⚠️  RESULT: Got result containers but no video platform URLs');
-        console.warn('[DIAGNOSTICS] Scraper selectors may need updating');
-        console.warn(`[DIAGNOSTICS] Response snippet: ${snippet}`);
-        return { ok: false, reason: 'no_video_links' };
+        console.log('[DIAGNOSTICS] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        return { ok: true, videoCount: videos.length };
 
     } catch (err) {
-        console.error(`[DIAGNOSTICS] ❌ RESULT: Unexpected error — ${err.message}`);
-        if (err.code) console.error(`[DIAGNOSTICS] Error code: ${err.code}`);
-        return { ok: false, reason: 'unexpected_error', error: err.message, code: err.code };
-    } finally {
+        const status = err.response?.status;
+        const body   = JSON.stringify(err.response?.data || {}).slice(0, 300);
+
+        if (status === 401 || status === 403) {
+            console.error(`[DIAGNOSTICS] ❌ RESULT: Serper key invalid or expired (HTTP ${status})`);
+            console.error('[DIAGNOSTICS] Fix: Check your key at https://serper.dev/dashboard');
+        } else if (status === 429) {
+            console.error('[DIAGNOSTICS] ❌ RESULT: Serper quota exceeded (HTTP 429)');
+            console.error('[DIAGNOSTICS] Fix: Upgrade plan at https://serper.dev/billing');
+        } else {
+            console.error(`[DIAGNOSTICS] ❌ RESULT: Serper request failed — ${err.message}`);
+            if (body) console.error(`[DIAGNOSTICS] Response: ${body}`);
+        }
+
         console.log('[DIAGNOSTICS] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        return { ok: false, reason: 'api_error', status, message: err.message };
     }
 };
 
