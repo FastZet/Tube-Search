@@ -9,6 +9,7 @@ const morgan = require('morgan');
 const manifest = require('./manifest.json');
 const config = require('./src/config');
 const streamHandler = require('./src/stream-handler');
+const { checkGoogleAccess } = require('./src/diagnostics');
 
 // Attach global Axios debug interceptors (enable with HTTP_DEBUG=true)
 require('./src/http-debug');
@@ -78,6 +79,12 @@ app.get('/:password/stream/:type/:id.json', requirePassword, async (req, res, ne
 // Healthcheck for Docker
 app.get('/health', (req, res) => res.json({ ok: true }));
 
+// Google scrape diagnostic — run on demand
+app.get('/diagnostics', async (req, res) => {
+    const result = await checkGoogleAccess();
+    res.json(result);
+});
+
 // Configure UI routes
 app.get('/', (req, res) => res.redirect('/configure'));
 app.get('/configure', (req, res) => {
@@ -113,4 +120,7 @@ const PORT = config.server.port;
 app.listen(PORT, () => {
     console.log(`[SERVER] Tube Search add-on running on port ${PORT}`);
     console.log(`[SERVER] To configure, visit: http://localhost:${PORT}/configure`);
+
+    // Run Google diagnostic on startup so the very first log tells you if scraping works
+    checkGoogleAccess().catch(() => {});
 });
