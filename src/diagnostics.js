@@ -1,11 +1,11 @@
 // src/diagnostics.js
-const http = require('./http-client');
+const { fetchRenderedPage } = require('./browser');
 const config = require('./config');
 const cheerio = require('cheerio');
 
 /**
- * Runs a real Google video search and diagnoses exactly why scraping
- * may be returning 0 results: IP block, CAPTCHA, selector mismatch, or success.
+ * Runs a real Google video search using headless Chromium and diagnoses
+ * exactly why scraping may be returning 0 results.
  */
 const checkGoogleAccess = async () => {
     const testQuery = 'Inception 2010 full movie';
@@ -16,42 +16,19 @@ const checkGoogleAccess = async () => {
     console.log(`[DIAGNOSTICS] Test URL: ${url}`);
 
     try {
-        const response = await http.get(url, {
-            headers: {
-                'User-Agent': config.scraping.userAgent,
-                'Accept-Language': 'en-US,en;q=0.5',
-            },
-            validateStatus: () => true, // never throw on HTTP errors
-            timeout: 15000,
-        });
+        const html = await fetchRenderedPage(url, 'a[href*="youtube.com"], div.g');
 
-        const status = response.status;
-        const body = (response.data || '').toString();
+        if (!html) {
+            console.error('[DIAGNOSTICS] ❌ RESULT: Chromium failed to fetch the page — browser may have crashed');
+            return { ok: false, reason: 'browser_failed' };
+        }
+
+        const body = html;
         const snippet = body.substring(0, 800).replace(/\s+/g, ' ');
 
-        console.log(`[DIAGNOSTICS] HTTP status: ${status}`);
         console.log(`[DIAGNOSTICS] Response size: ${body.length} bytes`);
 
-        // --- Check 1: Hard IP block ---
-        if (status === 429) {
-            console.error('[DIAGNOSTICS] ❌ RESULT: IP BLOCKED — Google returned 429 Too Many Requests');
-            console.error('[DIAGNOSTICS] Fix: Use a residential proxy via ADDON_PROXY env variable');
-            return { ok: false, reason: 'ip_blocked_429', status };
-        }
-
-        if (status === 403) {
-            console.error('[DIAGNOSTICS] ❌ RESULT: IP BLOCKED — Google returned 403 Forbidden');
-            console.error('[DIAGNOSTICS] Fix: Use a residential proxy via ADDON_PROXY env variable');
-            return { ok: false, reason: 'ip_blocked_403', status };
-        }
-
-        if (status !== 200) {
-            console.error(`[DIAGNOSTICS] ❌ RESULT: Unexpected HTTP ${status}`);
-            console.error(`[DIAGNOSTICS] Response snippet: ${snippet}`);
-            return { ok: false, reason: `unexpected_status_${status}`, status };
-        }
-
-        // --- Check 2: CAPTCHA / unusual traffic page (status 200 but not real results) ---
+        // --- Check 1: CAPTCHA / unusual traffic page ---
         const isCaptcha =
             body.includes('detected unusual traffic') ||
             body.includes('our systems have detected') ||
@@ -60,16 +37,15 @@ const checkGoogleAccess = async () => {
             body.toLowerCase().includes('captcha');
 
         if (isCaptcha) {
-            console.error('[DIAGNOSTICS] ❌ RESULT: CAPTCHA — Google flagged this IP and is serving a challenge page');
+            console.error('[DIAGNOSTICS] ❌ RESULT: CAPTCHA — Google flagged this IP even with a real browser');
             console.error('[DIAGNOSTICS] Fix: Use a residential proxy via ADDON_PROXY env variable');
             console.error(`[DIAGNOSTICS] Response snippet: ${snippet}`);
-            return { ok: false, reason: 'captcha', status };
+            return { ok: false, reason: 'captcha' };
         }
 
-        // --- Check 3: Real 200 but selectors find nothing (HTML structure changed) ---
+        // --- Check 2: JS rendered fine but selectors find nothing ---
         const $ = cheerio.load(body);
 
-        // Count raw video platform links in the page
         const videoLinks = $('a[href]').filter((_, el) => {
             const href = $(el).attr('href') || '';
             return (
@@ -80,8 +56,6 @@ const checkGoogleAccess = async () => {
             );
         });
 
-        // Count what the actual scraper selectors would find
-        // (mirror whatever selectors scraper-service.js uses)
         const scraperResults = $('div.g, div[data-ved], div.MjjYud').filter((_, el) => {
             const text = $(el).text();
             return text.length > 10;
@@ -91,10 +65,10 @@ const checkGoogleAccess = async () => {
         console.log(`[DIAGNOSTICS] Scraper-style result containers found: ${scraperResults.length}`);
 
         if (videoLinks.length === 0 && scraperResults.length === 0) {
-            console.error('[DIAGNOSTICS] ❌ RESULT: SELECTOR MISMATCH — Got 200 with content but zero video links found');
-            console.error('[DIAGNOSTICS] Google likely changed their HTML structure');
+            console.error('[DIAGNOSTICS] ❌ RESULT: SELECTOR MISMATCH — JS rendered fine but zero video links found');
+            console.error('[DIAGNOSTICS] Google likely changed their HTML structure — scraper selectors need updating');
             console.error(`[DIAGNOSTICS] Response snippet: ${snippet}`);
-            return { ok: false, reason: 'selector_mismatch', status };
+            return { ok: false, reason: 'selector_mismatch' };
         }
 
         if (videoLinks.length > 0) {
@@ -102,20 +76,19 @@ const checkGoogleAccess = async () => {
             videoLinks.slice(0, 5).each((_, el) => {
                 console.log(`[DIAGNOSTICS]   Found link: ${$(el).attr('href')}`);
             });
-            return { ok: true, status, videoLinksFound: videoLinks.length };
+            return { ok: true, videoLinksFound: videoLinks.length };
         }
 
-        // Got containers but no video links — partial selector match
+        // Containers found but no video platform links
         console.warn('[DIAGNOSTICS] ⚠️  RESULT: Got result containers but no video platform URLs');
         console.warn('[DIAGNOSTICS] Scraper selectors may need updating');
         console.warn(`[DIAGNOSTICS] Response snippet: ${snippet}`);
-        return { ok: false, reason: 'no_video_links', status };
+        return { ok: false, reason: 'no_video_links' };
 
     } catch (err) {
-        console.error(`[DIAGNOSTICS] ❌ RESULT: Request failed entirely — ${err.message}`);
+        console.error(`[DIAGNOSTICS] ❌ RESULT: Unexpected error — ${err.message}`);
         if (err.code) console.error(`[DIAGNOSTICS] Error code: ${err.code}`);
-        console.error('[DIAGNOSTICS] This could mean the VPS has no outbound HTTP access to Google');
-        return { ok: false, reason: 'request_failed', error: err.message, code: err.code };
+        return { ok: false, reason: 'unexpected_error', error: err.message, code: err.code };
     } finally {
         console.log('[DIAGNOSTICS] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
