@@ -15,6 +15,7 @@
     "morgan": "^1.10.1",
     "cheerio": "^1.1.2",
     "stremio-addon-sdk": "^1.6.10",
+    "puppeteer-core": "^22.0.0",
     "proxy-agent": "^6.5.0"
   }
 }
