@@ -5,10 +5,62 @@ const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromiu
 
 let _browser = null;
 
+// ---------------------------------------------------------------------------
+// Internal helper: parse ADDON_PROXY into a host:port string that Chromium
+// understands via --proxy-server.
+//
+// gluetun exposes a plain HTTP proxy (e.g. http://gluetun:8080).
+// Chromium's --proxy-server flag accepts  "http=host:port;https=host:port"
+// or just "host:port" (which applies to all schemes).
+//
+// The key insight: we NEVER pass --proxy-server for HTTPS targets because
+// gluetun's built-in HTTP proxy does NOT support the CONNECT method that
+// HTTPS tunneling requires.  Instead we route ALL traffic through the
+// gluetun *network namespace* (i.e. the container's default route already
+// exits through the VPN) and simply do NOT pass any proxy flag to Chromium.
+//
+// However, if the operator has configured a proper CONNECT-capable proxy
+// (e.g. Squid, tinyproxy with CONNECT enabled, a SOCKS5 proxy), we honour
+// it via --proxy-server.
+//
+// Detection rule:
+//   socks4:// | socks5://  → always supports CONNECT → pass to Chromium
+//   http://                → assume plain-HTTP-only (gluetun default) → skip
+//   https://               → treat as CONNECT-capable → pass to Chromium
+// ---------------------------------------------------------------------------
+const _chromiumProxyArg = () => {
+    const raw = (process.env.ADDON_PROXY || '').trim();
+    if (!raw) return null;
+
+    try {
+        const u = new URL(raw);
+        const scheme = u.protocol.replace(':', '');
+
+        if (scheme === 'socks4' || scheme === 'socks5') {
+            // e.g. socks5://user:pass@host:1080  →  socks5://host:1080
+            return `--proxy-server=socks5://${u.hostname}:${u.port}`;
+        }
+
+        if (scheme === 'https') {
+            return `--proxy-server=https://${u.hostname}:${u.port}`;
+        }
+
+        // scheme === 'http' (gluetun, tinyproxy plain-HTTP, etc.)
+        // These proxies do NOT support HTTP CONNECT for HTTPS targets.
+        // Chromium routes HTTPS through the OS network stack (already VPN-ed),
+        // so we skip --proxy-server entirely.
+        console.log('[BROWSER] ADDON_PROXY is plain-HTTP; skipping --proxy-server for Chromium (VPN container routing assumed)');
+        return null;
+
+    } catch (_) {
+        return null;
+    }
+};
+
 const getBrowser = async () => {
     if (_browser && _browser.isConnected()) return _browser;
 
-    const proxyUrl = process.env.ADDON_PROXY && process.env.ADDON_PROXY.trim();
+    const proxyArg = _chromiumProxyArg();
 
     console.log('[BROWSER] Launching Chromium...');
     _browser = await puppeteer.launch({
@@ -25,8 +77,9 @@ const getBrowser = async () => {
             '--disable-background-networking',
             '--disable-default-apps',
             '--mute-audio',
-            // Route Chromium through the proxy if ADDON_PROXY is set
-            ...(proxyUrl ? [`--proxy-server=${proxyUrl}`] : []),
+            // Only injected for SOCKS or HTTPS proxies; plain-HTTP proxies
+            // (gluetun) are intentionally omitted — see _chromiumProxyArg().
+            ...(proxyArg ? [proxyArg] : []),
         ],
     });
 
@@ -39,7 +92,7 @@ const getBrowser = async () => {
     return _browser;
 };
 
-// Rotate through realistic Chrome UAs to avoid fingerprint monotony
+// Rotate realistic Chrome UAs to reduce fingerprint monotony
 const _USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
@@ -82,17 +135,16 @@ const fetchRenderedPage = async (url, waitForSelector = null) => {
         });
 
         // Warm up with google.com homepage before any search request.
-        // This establishes a cookie/session so the search doesn't arrive "cold"
-        // from a suspicious datacenter IP, which is a strong CAPTCHA signal.
+        // Arriving "cold" from a datacenter IP is a strong CAPTCHA signal;
+        // a prior homepage visit establishes cookies that reduce bot-score.
         if (url.includes('google.com/search')) {
             try {
                 await page.goto('https://www.google.com/', {
                     waitUntil: 'domcontentloaded',
                     timeout: 15000,
                 });
-                // Human-like delay: 1.5 – 3.5 seconds
-                const jitter = 1500 + Math.random() * 2000;
-                await new Promise(r => setTimeout(r, jitter));
+                // Human-like pause: 1.5 – 3.5 seconds
+                await new Promise(r => setTimeout(r, 1500 + Math.random() * 2000));
             } catch (_) {
                 // Warm-up failure is non-fatal — continue to the real URL
             }
@@ -102,7 +154,7 @@ const fetchRenderedPage = async (url, waitForSelector = null) => {
 
         if (waitForSelector) {
             await page.waitForSelector(waitForSelector, { timeout: 8000 }).catch(() => {
-                // Selector didn't appear — page may still have partial content, continue anyway
+                // Selector didn't appear — page may still have partial content
             });
         }
 
