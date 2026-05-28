@@ -10,6 +10,7 @@ const manifest = require('./manifest.json');
 const config = require('./src/config');
 const streamHandler = require('./src/stream-handler');
 const { checkGoogleAccess } = require('./src/diagnostics');
+const { getBrowser, closeBrowser } = require('./src/browser');
 
 // Attach global Axios debug interceptors (enable with HTTP_DEBUG=true)
 require('./src/http-debug');
@@ -26,7 +27,6 @@ app.use(morgan(':date[iso] :req-id :method :url :status :res[content-length] - :
 
 // --- CORS ---
 app.use((req, res, next) => {
-    // Keep permissive default for Stremio compatibility; tune in production if needed
     res.setHeader('Access-Control-Allow-Origin', config.server.corsOrigins.includes('*') ? '*' : config.server.corsOrigins || '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     next();
@@ -97,7 +97,7 @@ app.get('/:anything/configure', (req, res) => {
 // Static assets
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 404 catch-all (avoid "*" which can break on some path parsers)
+// 404 catch-all
 app.use((req, res) => res.status(404).send('Not Found'));
 
 // Global error handler
@@ -121,6 +121,18 @@ app.listen(PORT, () => {
     console.log(`[SERVER] Tube Search add-on running on port ${PORT}`);
     console.log(`[SERVER] To configure, visit: http://localhost:${PORT}/configure`);
 
-    // Run Google diagnostic on startup so the very first log tells you if scraping works
+    // Pre-launch Chromium so the first request doesn't pay the cold-start penalty
+    getBrowser().catch((err) => {
+        console.error('[SERVER] Failed to pre-launch Chromium:', err.message);
+    });
+
+    // Run Google diagnostic on startup
     checkGoogleAccess().catch(() => {});
+});
+
+// Graceful shutdown — close Chromium before the container stops
+process.on('SIGTERM', async () => {
+    console.log('[SERVER] SIGTERM received — shutting down gracefully');
+    await closeBrowser();
+    process.exit(0);
 });
