@@ -3,39 +3,33 @@
 const dns = require('dns');
 dns.setDefaultResultOrder('ipv4first');
 
-const express = require('express');
-const path = require('path');
-const morgan = require('morgan');
+const express  = require('express');
+const path     = require('path');
+const morgan   = require('morgan');
 const manifest = require('./manifest.json');
-const config = require('./src/config');
+const config   = require('./src/config');
 const streamHandler = require('./src/stream-handler');
 const { checkGoogleAccess } = require('./src/diagnostics');
-const { getBrowser, closeBrowser } = require('./src/browser');
 
-// Attach global Axios debug interceptors (enable with HTTP_DEBUG=true)
 require('./src/http-debug');
 
 const app = express();
-
-// Trust reverse proxies for accurate logging
 app.set('trust proxy', true);
 
-// Request logging
-morgan.token('req-id', (req) => req.headers['x-request-id'] || '-');
+morgan.token('req-id',  (req) => req.headers['x-request-id'] || '-');
 morgan.token('real-ip', (req) => (req.headers['x-forwarded-for'] || req.ip || '').toString());
 app.use(morgan(':date[iso] :req-id :method :url :status :res[content-length] - :response-time ms :real-ip ":user-agent"'));
 
-// --- CORS ---
 app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', config.server.corsOrigins.includes('*') ? '*' : config.server.corsOrigins || '*');
+    res.setHeader('Access-Control-Allow-Origin',
+        config.server.corsOrigins.includes('*') ? '*' : config.server.corsOrigins || '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     next();
 });
 
-// --- Auth middleware using ADDON_PASSWORD ---
 const requirePassword = (req, res, next) => {
     const expected = process.env.ADDON_PASSWORD || '';
-    const supplied = req.params.password || '';
+    const supplied  = req.params.password || '';
     if (!expected) {
         console.error('[SERVER] Missing ADDON_PASSWORD env var');
         return res.status(500).json({ err: 'Server missing ADDON_PASSWORD.' });
@@ -47,9 +41,6 @@ const requirePassword = (req, res, next) => {
     next();
 };
 
-// --- Routes ---
-
-// Manifest: /:password/manifest.json
 app.get('/:password/manifest.json', requirePassword, (req, res) => {
     const tmdbKey = process.env.TMDB_API_KEY || '';
     if (!tmdbKey) {
@@ -63,7 +54,6 @@ app.get('/:password/manifest.json', requirePassword, (req, res) => {
     res.json(configuredManifest);
 });
 
-// Streams: /:password/stream/:type/:id.json
 app.get('/:password/stream/:type/:id.json', requirePassword, async (req, res, next) => {
     try {
         const { type, id } = req.params;
@@ -71,68 +61,46 @@ app.get('/:password/stream/:type/:id.json', requirePassword, async (req, res, ne
         const result = await streamHandler.getStreams(type, id);
         console.log('[SERVER] Stream response', { streams: result?.streams?.length || 0 });
         res.json(result);
-    } catch (err) {
-        next(err);
-    }
+    } catch (err) { next(err); }
 });
 
-// Healthcheck for Docker
-app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/health',      (req, res) => res.json({ ok: true }));
+app.get('/diagnostics', async (req, res) => { const r = await checkGoogleAccess(); res.json(r); });
 
-// Google scrape diagnostic — run on demand
-app.get('/diagnostics', async (req, res) => {
-    const result = await checkGoogleAccess();
-    res.json(result);
-});
+app.get('/',                    (req, res) => res.redirect('/configure'));
+app.get('/configure',           (req, res) => res.sendFile(path.join(__dirname, 'public', 'configure.html')));
+app.get('/:anything/configure', (req, res) => res.sendFile(path.join(__dirname, 'public', 'configure.html')));
 
-// Configure UI routes
-app.get('/', (req, res) => res.redirect('/configure'));
-app.get('/configure', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'configure.html'));
-});
-app.get('/:anything/configure', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'configure.html'));
-});
-
-// Static assets
 app.use(express.static(path.join(__dirname, 'public')));
-
-// 404 catch-all
 app.use((req, res) => res.status(404).send('Not Found'));
 
-// Global error handler
 app.use((err, req, res, next) => {
     const status = err.status || err.statusCode || 500;
     console.error('[SERVER][ERROR]', {
-        status,
-        message: err.message,
-        stack: err.stack,
-        path: req.originalUrl,
-        ip: req.ip,
-        ua: req.headers['user-agent']
+        status, message: err.message, stack: err.stack,
+        path: req.originalUrl, ip: req.ip, ua: req.headers['user-agent'],
     });
     if (res.headersSent) return next(err);
     res.status(status).json({ err: err.message || 'Internal Server Error' });
 });
 
-// Start server
 const PORT = config.server.port;
 app.listen(PORT, () => {
     console.log(`[SERVER] Tube Search add-on running on port ${PORT}`);
     console.log(`[SERVER] To configure, visit: http://localhost:${PORT}/configure`);
 
-    // Pre-launch Chromium so the first request doesn't pay the cold-start penalty
-    getBrowser().catch((err) => {
-        console.error('[SERVER] Failed to pre-launch Chromium:', err.message);
-    });
+    if (!process.env.SERPER_API_KEY) {
+        console.warn('[SERVER] ⚠️  SERPER_API_KEY is not set — Google video search will fail');
+        console.warn('[SERVER]    Get a free key at https://serper.dev');
+    } else {
+        console.log('[SERVER] ✅ SERPER_API_KEY detected');
+    }
 
-    // Run Google diagnostic on startup
+    // Run Serper diagnostic on startup
     checkGoogleAccess().catch(() => {});
 });
 
-// Graceful shutdown — close Chromium before the container stops
 process.on('SIGTERM', async () => {
     console.log('[SERVER] SIGTERM received — shutting down gracefully');
-    await closeBrowser();
     process.exit(0);
 });
