@@ -4,9 +4,9 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 
-const YTDLP_PATH         = process.env.YTDLP_PATH || '/usr/local/bin/yt-dlp';
-const RESOLVE_TIMEOUT_MS = 25000;
-const CACHE_TTL_MS       = 4 * 60 * 60 * 1000;
+const YTDLP_PATH          = process.env.YTDLP_PATH || '/usr/local/bin/yt-dlp';
+const RESOLVE_TIMEOUT_MS  = 25000;
+const CACHE_TTL_MS        = 4 * 60 * 60 * 1000;
 
 const cache = new Map();
 
@@ -32,7 +32,6 @@ const isYouTube = (url) => {
 
 const isBlockedDomain = (url) => {
     const host = hostnameOf(url);
-
     if (!host) return false;
 
     return (
@@ -49,11 +48,15 @@ const isOkRu = (url) => {
 };
 
 const canResolveYouTubeDirectly = () => {
-    // Allow direct YouTube resolution only if operator explicitly opts in.
-    // Typical cases:
-    // 1. ADDON_PROXY routes through a residential proxy
-    // 2. YouTube cookies are mounted and used by yt-dlp
     return process.env.YTDLP_ENABLE_YOUTUBE === 'true';
+};
+
+const getFormatSelector = (pageUrl) => {
+    if (isYouTube(pageUrl)) {
+        return 'bestvideo*[ext=mp4]+bestaudio[ext=m4a]/bestvideo*+bestaudio/best';
+    }
+
+    return 'best[ext=mp4]/best[ext=webm]/bestvideo*+bestaudio/best';
 };
 
 const buildArgs = (pageUrl) => {
@@ -62,7 +65,7 @@ const buildArgs = (pageUrl) => {
         '--no-playlist',
         '--no-warnings',
         '--format',
-        'best[ext=mp4]/best[ext=webm]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+        getFormatSelector(pageUrl),
         '--socket-timeout',
         '10',
     ];
@@ -76,13 +79,6 @@ const buildArgs = (pageUrl) => {
     return args;
 };
 
-/**
- * Resolves a web page URL into a direct playable URL using yt-dlp.
- * Returns null when direct resolution should be skipped.
- *
- * @param {string} pageUrl
- * @returns {Promise<string|null>}
- */
 const resolveDirectUrl = async (pageUrl) => {
     if (isBlockedDomain(pageUrl)) {
         console.log(`[URL_RESOLVER] Skipped (blocked extractor/domain): ${pageUrl}`);
@@ -106,7 +102,6 @@ const resolveDirectUrl = async (pageUrl) => {
 
     try {
         const args = buildArgs(pageUrl);
-
         const { stdout } = await Promise.race([
             execFileAsync(YTDLP_PATH, args, { timeout: timeoutMs }),
             new Promise((_, reject) =>
@@ -124,7 +119,10 @@ const resolveDirectUrl = async (pageUrl) => {
         console.log(`[URL_RESOLVER] Resolved OK: ${directUrl.substring(0, 80)}...`);
 
         purgeExpired();
-        cache.set(pageUrl, { url: directUrl, expiresAt: Date.now() + CACHE_TTL_MS });
+        cache.set(pageUrl, {
+            url: directUrl,
+            expiresAt: Date.now() + CACHE_TTL_MS,
+        });
 
         return directUrl;
     } catch (err) {
