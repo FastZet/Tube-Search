@@ -53,10 +53,13 @@ const canResolveYouTubeDirectly = () => {
 
 const getFormatSelector = (pageUrl) => {
     if (isYouTube(pageUrl)) {
-        return 'bestvideo*[ext=mp4]+bestaudio[ext=m4a]/bestvideo*+bestaudio/best';
+        // IMPORTANT:
+        // We need a single direct-play URL for Stremio, not split audio+video URLs.
+        // So prefer a progressive MP4 stream, then WebM, then any single best stream.
+        return 'best[ext=mp4]/best[ext=webm]/best';
     }
 
-    return 'best[ext=mp4]/best[ext=webm]/bestvideo*+bestaudio/best';
+    return 'best[ext=mp4]/best[ext=webm]/best';
 };
 
 const buildArgs = (pageUrl) => {
